@@ -1,0 +1,61 @@
+{
+  "session_id": "2b930212d54045cd8d2eb84db867af72",
+  "source_name": "demo.csv",
+  "uploaded_at": "2026-09-04T05:32:48.305474+00:00",
+  "row_count": 4,
+  "columns": [
+    "year",
+    "mine",
+    "mineral",
+    "state",
+    "district",
+    "production",
+    "target"
+  ],
+  "column_map": {
+    "year": "year",
+    "mine": "mine",
+    "mineral": "mineral",
+    "state": "state",
+    "district": "district",
+    "production": "production",
+    "target": "target"
+  },
+  "quality": {
+    "rows": 4,
+    "columns": 7,
+    "missing_values": 0,
+    "duplicates": 0,
+    "invalid_numeric_values": 0,
+    "year_range": [
+      2021,
+      2024
+    ],
+    "mines": 1,
+    "minerals": 1,
+    "states": 1,
+    "districts": 1,
+    "quality_score": 100.0,
+    "filename": "demo.csv"
+  },
+  "has_data": true,
+  "raw_columns": [
+    "year",
+    "mine",
+    "mineral",
+    "state",
+    "district",
+    "production",
+    "target"
+  ],
+  "chat_history": [],
+  "last_model": {
+    "model_name": "moving_average",
+    "metrics": {
+      "mae": 162.5,
+      "rmse": 185.7586,
+      "mape": 24.3848
+    },
+    "trained_at": "2026-09-04T05:32:48.319275+00:00"
+  }
+}

@@ -1,0 +1,15 @@
+fastapi
+uvicorn[standard]
+pydantic
+numpy
+reportlab
+python-multipart
+pandas
+openpyxl
+
+python-dotenv
+groq
+sqlalchemy
+passlib[bcrypt]
+bcrypt
+pyjwt
