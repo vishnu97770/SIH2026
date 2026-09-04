@@ -1,4 +1,19 @@
 const API_PREFIX = import.meta.env.VITE_API_PREFIX || "/api";
+const DATASET_EXTENSIONS = new Set(["csv", "xlsx", "xls"]);
+const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
+
+export function validateDatasetFile(file) {
+  if (!file) return "Choose a CSV or Excel dataset to upload.";
+
+  const extension = file.name?.split(".").pop()?.toLowerCase();
+  if (!DATASET_EXTENSIONS.has(extension)) {
+    return "Unsupported file type. Upload a CSV, XLSX, or XLS production dataset.";
+  }
+  if (file.size > MAX_UPLOAD_BYTES) {
+    return "File is too large. The maximum upload size is 25 MB.";
+  }
+  return "";
+}
 
 async function request(path, options = {}) {
   const res = await fetch(`${API_PREFIX}${path}`, options);

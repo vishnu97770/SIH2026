@@ -11,7 +11,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { api } from "../api/client";
+import { api, validateDatasetFile } from "../api/client";
 import { ChartCard } from "../components/ChartCard";
 import { KpiCard } from "../components/KpiCard";
 import { Icon } from "../components/Icon";
@@ -98,6 +98,11 @@ export function Dashboard() {
 
   const handleUpload = async (file) => {
     if (!file) return;
+    const validationError = validateDatasetFile(file);
+    if (validationError) {
+      setState((prev) => ({ ...prev, error: validationError, message: "" }));
+      return;
+    }
     setState((prev) => ({ ...prev, uploading: true, error: "", message: "" }));
     try {
       await api.uploadDataset(file);

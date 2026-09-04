@@ -3,9 +3,11 @@ import os
 
 from dotenv import load_dotenv
 
-load_dotenv()
-
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+# Load configuration next to the backend code even when uvicorn is started elsewhere.
+load_dotenv(os.path.join(BASE_DIR, ".env"))
+load_dotenv()
 
 
 @dataclass

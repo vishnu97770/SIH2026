@@ -114,14 +114,17 @@ async def upload(file: UploadFile = File(...)):
             detail=f"File is too large. Maximum allowed size is {settings.max_upload_mb} MB.",
         )
 
-    safe_name = f"{Path(filename).stem}_{os.getpid()}_{Path(filename).suffix.lstrip('.')}"
-    dest = Path(settings.upload_dir) / safe_name
-    dest.parent.mkdir(parents=True, exist_ok=True)
-    dest.write_bytes(content)
+    try:
+        safe_name = f"{Path(filename).stem}_{os.getpid()}_{Path(filename).suffix.lstrip('.')}"
+        dest = Path(settings.upload_dir) / safe_name
+        dest.parent.mkdir(parents=True, exist_ok=True)
+        dest.write_bytes(content)
 
-    result = upload_dataset(content, filename)
-    train_forecast_model()
-    return {"ok": True, **result}
+        result = upload_dataset(content, filename)
+        train_forecast_model()
+        return {"ok": True, **result}
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.post("/documents/upload")

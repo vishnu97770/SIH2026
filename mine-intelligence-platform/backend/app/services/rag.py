@@ -68,7 +68,25 @@ def _build_context(question: str, df: pd.DataFrame) -> dict[str, Any]:
             )
     elif "forecast" in lower or "predict" in lower:
         context["direct_answer"] = _safe_json(forecast_pack.get("forecast", []))
-    elif "anomal" in lower or "decrease" in lower or "drop" in lower:
+    elif ("why" in lower or "latest" in lower) and ("anomal" in lower or "decrease" in lower or "drop" in lower or "fall" in lower or "decline" in lower):
+        latest = indicators.get("latest_production")
+        latest_year = indicators.get("latest_year")
+        growth = indicators.get("growth_pct")
+        previous = None
+        if latest is not None and growth is not None and growth != -100:
+            previous = latest / (1 + (growth / 100))
+        if growth is not None and growth >= 0:
+            context["direct_answer"] = (
+                f"Production did not fall in {latest_year}. It increased by {growth}% "
+                f"from approximately {previous:,.0f} in {latest_year - 1} to {latest:,.0f} in {latest_year}."
+            )
+        elif latest is not None and growth is not None:
+            context["direct_answer"] = (
+                f"Production fell by {abs(growth)}% in {latest_year}, from approximately "
+                f"{previous:,.0f} in {latest_year - 1} to {latest:,.0f}. The dataset does not include "
+                "operational cause fields, so it cannot identify why the decline occurred."
+            )
+    elif "anomal" in lower or "decrease" in lower or "drop" in lower or "fall" in lower or "decline" in lower:
         context["direct_answer"] = _safe_json(anomaly_pack.get("primary"))
 
     return context

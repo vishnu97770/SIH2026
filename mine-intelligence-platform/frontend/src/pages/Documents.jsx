@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { api } from "../api/client";
+import { api, validateDatasetFile } from "../api/client";
 import { ChartCard } from "../components/ChartCard";
 import { Icon } from "../components/Icon";
 import { formatDateTime, formatNumber } from "../utils/format";
@@ -33,6 +33,12 @@ export function Documents() {
 
   const upload = async (file) => {
     if (!file) return;
+    const validationError = validateDatasetFile(file);
+    if (validationError) {
+      setError(validationError);
+      setMessage("");
+      return;
+    }
     setUploading(true);
     setError("");
     setMessage("");

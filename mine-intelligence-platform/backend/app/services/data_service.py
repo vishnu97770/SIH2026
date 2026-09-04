@@ -156,7 +156,23 @@ def _read_uploaded_file(file_bytes: bytes, filename: str) -> pd.DataFrame:
         return pd.read_csv(io.BytesIO(file_bytes))
     if suffix in {".xlsx", ".xls"}:
         try:
-            return pd.read_excel(io.BytesIO(file_bytes))
+            workbook = io.BytesIO(file_bytes)
+            df = pd.read_excel(workbook)
+            required_aliases = ALIASES["year"] | ALIASES["date"] | ALIASES["production"]
+            has_known_header = any(
+                _slug(column) in required_aliases or any(alias in _slug(column) for alias in required_aliases)
+                for column in df.columns
+            )
+            if has_known_header:
+                return df
+
+            # Government workbooks often put a report title or metadata above the table.
+            preview = pd.read_excel(io.BytesIO(file_bytes), header=None, nrows=12)
+            for row_number, row in preview.iterrows():
+                headers = [str(value).strip() for value in row.tolist()]
+                if sum(_find_column(headers, aliases) is not None for aliases in ALIASES.values()) >= 2:
+                    return pd.read_excel(io.BytesIO(file_bytes), header=int(row_number))
+            return df
         except Exception as exc:
             raise ValueError("Unable to read the Excel file on this machine.") from exc
     raise ValueError("Unsupported file type. Please upload a CSV, XLSX, or XLS file.")
