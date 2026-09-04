@@ -94,6 +94,15 @@ export function Documents() {
           >
             Load Demo Dataset
           </button>
+          <button type="button" onClick={async () => {
+            if (!window.confirm("Remove the active dataset and all of its analysis results?")) return;
+            setUploading(true); setError(""); setMessage("");
+            try { const result = await api.removeDataset(); setMessage(result.message || "Dataset removed."); await load(); }
+            catch (err) { setError(err.message || "Could not remove the dataset."); }
+            finally { setUploading(false); }
+          }} disabled={uploading || !session?.has_data} className="rounded-xl border border-red-300/40 bg-red-500/10 px-4 py-2.5 text-sm font-semibold text-red-100 transition hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-40">
+            Remove Dataset
+          </button>
         </div>
       </div>
 

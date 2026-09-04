@@ -121,6 +121,20 @@ export function Dashboard() {
     }
   };
 
+  const removeDataset = async () => {
+    if (!window.confirm("Remove the active dataset and all of its analysis results?")) return;
+    setState((prev) => ({ ...prev, uploading: true, error: "", message: "" }));
+    try {
+      const result = await api.removeDataset();
+      setState((prev) => ({ ...prev, message: result.message || "Dataset removed." }));
+      await loadDashboard(EMPTY_FILTERS);
+    } catch (err) {
+      setState((prev) => ({ ...prev, error: err.message || "Could not remove the dataset." }));
+    } finally {
+      setState((prev) => ({ ...prev, uploading: false }));
+    }
+  };
+
   const quality = state.session?.quality || {};
   const prod = state.production || { historical: [] };
   const yearlyTrend = prod.historical || [];
@@ -221,6 +235,9 @@ export function Dashboard() {
                 className="rounded-xl border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/10"
               >
                 Refresh Analysis
+              </button>
+              <button type="button" onClick={removeDataset} disabled={state.uploading || !state.session?.session?.has_data} className="rounded-xl border border-red-300/40 bg-red-500/10 px-4 py-2.5 text-sm font-semibold text-red-100 transition hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-40">
+                Remove Dataset
               </button>
             </div>
           </div>

@@ -13,7 +13,7 @@ from pydantic import BaseModel, Field
 from ..config import settings
 from ..services import analytics, rag, report
 from ..services.anomaly import detect_anomalies
-from ..services.data_service import get_dataframe, get_filter_options, get_session, has_data, set_session_from_dataframe, upload_dataset
+from ..services.data_service import get_dataframe, get_filter_options, get_session, has_data, remove_dataset, set_session_from_dataframe, upload_dataset
 from ..services.forecast import forecast, train_forecast_model
 
 router = APIRouter(prefix="/api")
@@ -130,6 +130,11 @@ async def upload(file: UploadFile = File(...)):
 @router.post("/documents/upload")
 async def upload_document(file: UploadFile = File(...)):
     return await upload(file)
+
+
+@router.delete("/dataset")
+def delete_dataset():
+    return remove_dataset()
 
 
 @router.post("/demo/load")

@@ -97,6 +97,7 @@ export const api = {
     return apiJson("/documents/upload", "POST", form);
   },
   loadDemoDataset: () => apiJson("/demo/load", "POST"),
+  removeDataset: () => apiJson("/dataset", "DELETE"),
   retrainModels: () => apiJson("/train-models", "POST"),
   suggestions: () => apiGet("/assistant/suggestions"),
   documents: () => apiGet("/documents"),

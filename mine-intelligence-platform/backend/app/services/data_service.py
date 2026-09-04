@@ -150,6 +150,23 @@ def clear_session() -> None:
     save_session()
 
 
+def remove_dataset() -> dict[str, Any]:
+    source_name = SESSION.source_name
+    clear_session()
+
+    if source_name:
+        source_stem = Path(source_name).stem
+        for path in Path(settings.upload_dir).glob(f"{source_stem}_*"):
+            if path.is_file():
+                path.unlink()
+
+    model_path = Path(settings.models_dir) / "production_forecaster.pkl"
+    if model_path.exists():
+        model_path.unlink()
+
+    return {"ok": True, "message": "The active dataset and its analysis artifacts were removed."}
+
+
 def _read_uploaded_file(file_bytes: bytes, filename: str) -> pd.DataFrame:
     suffix = Path(filename).suffix.lower()
     if suffix == ".csv":

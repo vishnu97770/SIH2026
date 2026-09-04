@@ -1,102 +1,61 @@
 {
-  "session_id": "87be836ef320489aa3c2d3ab4ef7498a",
-  "source_name": "cdchap2_FINAL_Mock_Production_Year_Date_Ready.xlsx",
-  "uploaded_at": "2026-09-04T07:19:09.448757+00:00",
-  "row_count": 416,
+  "session_id": "611c6f0053a342f2b46945f2225a47f2",
+  "source_name": "demo_mining_dataset.csv",
+  "uploaded_at": "2026-09-04T08:16:04.923209+00:00",
+  "row_count": 12,
   "columns": [
-    "Company",
     "year",
-    "Financial Year",
-    "date",
-    "production"
+    "mine",
+    "mineral",
+    "state",
+    "district",
+    "production",
+    "target"
   ],
   "column_map": {
-    "Year": "year",
-    "Date": "date",
-    "Production": "production"
+    "year": "year",
+    "mine": "mine",
+    "mineral": "mineral",
+    "state": "state",
+    "district": "district",
+    "production": "production",
+    "target": "target"
   },
   "quality": {
-    "rows": 416,
-    "columns": 5,
-    "missing_values": 8,
+    "rows": 12,
+    "columns": 7,
+    "missing_values": 0,
     "duplicates": 0,
     "invalid_numeric_values": 0,
     "year_range": [
-      2018,
+      2019,
       2025
     ],
-    "mines": 0,
-    "minerals": 0,
-    "states": 0,
-    "districts": 0,
-    "quality_score": 98.8,
-    "filename": "cdchap2_FINAL_Mock_Production_Year_Date_Ready.xlsx"
+    "mines": 2,
+    "minerals": 2,
+    "states": 2,
+    "districts": 2,
+    "quality_score": 100.0,
+    "filename": "demo_mining_dataset.csv"
   },
   "has_data": true,
   "raw_columns": [
-    "Company",
-    "Year",
-    "Financial Year",
-    "Date",
-    "Production"
+    "year",
+    "mine",
+    "mineral",
+    "state",
+    "district",
+    "production",
+    "target"
   ],
-  "chat_history": [
-    {
-      "role": "user",
-      "content": "hi"
-    },
-    {
-      "role": "assistant",
-      "content": "The dataset contains 416 rows across ['Company', 'year', 'Financial Year', 'date', 'production'] columns. Latest production is 63591785.0 in 2025. Year-over-year growth is 0.42%. The primary anomaly is in 2023 with a 4.73% deviation. The next forecast year is 2026 at 65627777.29 with bounds 64636113.79 to 66619440.78. Historical trend spans 2018 to 2025."
-    },
-    {
-      "role": "user",
-      "content": "Summarize this dataset"
-    },
-    {
-      "role": "assistant",
-      "content": "The dataset contains 416 rows across ['Company', 'year', 'Financial Year', 'date', 'production'] columns. Latest production is 63591785.0 in 2025. Year-over-year growth is 0.42%. The primary anomaly is in 2023 with a 4.73% deviation. The next forecast year is 2026 at 65627777.29 with bounds 64636113.79 to 66619440.78. Historical trend spans 2018 to 2025."
-    },
-    {
-      "role": "user",
-      "content": "Why did production fall in the latest year?"
-    },
-    {
-      "role": "assistant",
-      "content": "Here is the grounded answer based on the uploaded dataset:\n\n{\n  \"year\": 2023,\n  \"actual\": 62317535.0,\n  \"expected\": 59503016.89,\n  \"anomaly_score\": 0.65,\n  \"severity\": \"MEDIUM\",\n  \"deviation_pct\": 4.73,\n  \"previous_year\": 59825959.0,\n  \"yoy_change_pct\": 4.16,\n  \"target_deviation_pct\": null,\n  \"reason\": \"Production in 2023 was 4.7% above the expected level. and 4.2% above the previous year's production.\",\n  \"context\": {\n    \"actual\": 62317535.0,\n    \"expected\": 59503016.89,\n    \"deviation_pct\": 4.73,\n    \"previous_year\": 59825959.0,\n    \"yoy_change_pct\": 4.16,\n    \"target_deviation_pct\": null\n  }\n}"
-    },
-    {
-      "role": "user",
-      "content": "hi"
-    },
-    {
-      "role": "assistant",
-      "content": "The dataset contains 416 rows across ['Company', 'year', 'Financial Year', 'date', 'production'] columns. Latest production is 63591785.0 in 2025. Year-over-year growth is 0.42%. The primary anomaly is in 2023 with a 4.73% deviation. The next forecast year is 2026 at 65627777.29 with bounds 64636113.79 to 66619440.78. Historical trend spans 2018 to 2025."
-    },
-    {
-      "role": "user",
-      "content": "Summarize this dataset"
-    },
-    {
-      "role": "assistant",
-      "content": "The dataset contains 416 rows across ['Company', 'year', 'Financial Year', 'date', 'production'] columns. Latest production is 63591785.0 in 2025. Year-over-year growth is 0.42%. The primary anomaly is in 2023 with a 4.73% deviation. The next forecast year is 2026 at 65627777.29 with bounds 64636113.79 to 66619440.78. Historical trend spans 2018 to 2025."
-    },
-    {
-      "role": "user",
-      "content": "Why did production fall in the latest year?"
-    },
-    {
-      "role": "assistant",
-      "content": "Here is the grounded answer based on the uploaded dataset:\n\nProduction did not fall in 2025. It increased by 0.42% from approximately 63,325,817 in 2024 to 63,591,785 in 2025."
-    }
-  ],
+  "chat_history": [],
   "last_model": {
-    "model_name": "linear_trend",
+    "model_name": "moving_average",
     "metrics": {
-      "mae": 603848.5143,
-      "rmse": 648464.1471,
-      "mape": 0.9508
+      "mae": 124.8333,
+      "rmse": 173.2726,
+      "mape": 14.0444
     },
-    "trained_at": "2026-09-04T07:19:09.453190+00:00"
+    "trained_at": "2026-09-04T08:16:04.931184+00:00"
   }
 }
