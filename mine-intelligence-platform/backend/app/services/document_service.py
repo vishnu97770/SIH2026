@@ -105,6 +105,27 @@ def _extract_image_page(image_path: Path) -> list[dict[str, Any]]:
     return [{"page": 1, "text": "", "ocr_used": False, "ocr_unavailable": True}]
 
 
+def _extract_docx_pages(docx_path: Path) -> list[dict[str, Any]]:
+    try:
+        from docx import Document as DocxDocument
+    except Exception:
+        return [{"page": 1, "text": "", "ocr_used": False, "ocr_unavailable": False}]
+    try:
+        doc = DocxDocument(str(docx_path))
+        text = "\n".join(p.text for p in doc.paragraphs if p.text.strip()).strip()
+    except Exception:
+        text = ""
+    return [{"page": 1, "text": text, "ocr_used": False, "ocr_unavailable": False}]
+
+
+def _extract_text_pages(text_path: Path) -> list[dict[str, Any]]:
+    try:
+        text = text_path.read_text(encoding="utf-8", errors="ignore").strip()
+    except Exception:
+        text = ""
+    return [{"page": 1, "text": text, "ocr_used": False, "ocr_unavailable": False}]
+
+
 def _infer_doc_type(filename: str, pages: list[dict[str, Any]]) -> str:
     haystack = filename.lower() + " " + " ".join(p["text"].lower() for p in pages[:3])
     for label, keywords in _TYPE_KEYWORDS.items():
@@ -133,16 +154,27 @@ def _chunk_page_text(text: str, target_chars: int = 500) -> list[str]:
 
 
 def ingest_document(file_bytes: bytes, filename: str) -> dict[str, Any]:
+    """Accepts any file type. PDF, PNG/JPG, DOCX, and TXT get real text extraction;
+    anything else is still stored so it shows up in the document library, just
+    without extracted text."""
     _ensure_dirs()
     suffix = Path(filename).suffix.lower()
-    if suffix not in SUPPORTED_SUFFIXES:
-        raise ValueError("Unsupported document type. Upload a PDF, PNG, or JPG file.")
 
     doc_id = uuid.uuid4().hex
-    dest = Path(settings.documents_dir) / f"{doc_id}{suffix}"
+    dest = Path(settings.documents_dir) / f"{doc_id}{suffix or '.bin'}"
     dest.write_bytes(file_bytes)
 
-    pages = _extract_pdf_pages(dest) if suffix == ".pdf" else _extract_image_page(dest)
+    if suffix == ".pdf":
+        pages = _extract_pdf_pages(dest)
+    elif suffix in {".png", ".jpg", ".jpeg"}:
+        pages = _extract_image_page(dest)
+    elif suffix in {".docx", ".doc"}:
+        pages = _extract_docx_pages(dest)
+    elif suffix == ".txt":
+        pages = _extract_text_pages(dest)
+    else:
+        pages = [{"page": 1, "text": "", "ocr_used": False, "ocr_unavailable": False}]
+
     doc_type = _infer_doc_type(filename, pages)
 
     chunks: list[dict[str, Any]] = []

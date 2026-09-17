@@ -13,3 +13,9 @@ sqlalchemy
 passlib[bcrypt]
 bcrypt
 pyjwt
+
+# Document ingestion (any file type upload)
+pypdf
+python-docx
+pillow
+pytesseract

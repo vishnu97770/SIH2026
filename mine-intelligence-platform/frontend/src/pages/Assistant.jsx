@@ -271,7 +271,7 @@ function MessageBubble({ message, onCitationClick }) {
                 onClick={() => onCitationClick(citation)}
                 className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700 transition hover:border-amber-300 hover:bg-amber-100"
               >
-                {citation.document} · p.{citation.page}
+                {citation.document}{citation.page != null ? ` · p.${citation.page}` : ""}
               </button>
             ))}
           </div>
@@ -307,7 +307,8 @@ function CitationModal({ citation, onClose }) {
           <div>
             <div className="text-xs font-semibold uppercase tracking-[0.2em] text-amber-600">Evidence source</div>
             <h3 className="mt-1 text-lg font-semibold text-stone-900">
-              {citation.document} <span className="text-sm font-normal text-stone-500">p.{citation.page}</span>
+              {citation.document}
+              {citation.page != null && <span className="text-sm font-normal text-stone-500"> p.{citation.page}</span>}
             </h3>
           </div>
           <button
@@ -332,4 +333,3 @@ function SummaryRow({ label, value }) {
     </div>
   );
 }
-

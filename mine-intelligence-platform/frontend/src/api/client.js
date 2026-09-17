@@ -3,13 +3,11 @@ const DATASET_EXTENSIONS = new Set(["csv", "xlsx", "xls"]);
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
 const TOKEN_KEY = "mi_token";
 
+// Any file can be uploaded. CSV/XLSX/XLS feed the analytics pipeline; everything
+// else (PDF, DOCX, images, text, or anything not listed here) is still accepted
+// and routed to the document library by the backend.
 export function validateDatasetFile(file) {
-  if (!file) return "Choose a CSV or Excel dataset to upload.";
-
-  const extension = file.name?.split(".").pop()?.toLowerCase();
-  if (!DATASET_EXTENSIONS.has(extension)) {
-    return "Unsupported file type. Upload a CSV, XLSX, or XLS production dataset.";
-  }
+  if (!file) return "Choose a file to upload.";
   if (file.size > MAX_UPLOAD_BYTES) {
     return "File is too large. The maximum upload size is 25 MB.";
   }
@@ -26,6 +24,11 @@ export function setToken(token) {
 
 export function clearToken() {
   localStorage.removeItem(TOKEN_KEY);
+}
+
+export function isDatasetFile(file) {
+  const extension = file?.name?.split(".").pop()?.toLowerCase();
+  return DATASET_EXTENSIONS.has(extension);
 }
 
 async function request(path, options = {}) {
@@ -142,4 +145,3 @@ export const api = {
 };
 
 export { request };
-

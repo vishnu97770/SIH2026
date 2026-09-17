@@ -24,6 +24,8 @@ logger = logging.getLogger(__name__)
 # actual production/geological data, not public content.
 router = APIRouter(prefix="/api", dependencies=[Depends(get_current_user)])
 
+DATASET_EXTENSIONS = {".csv", ".xlsx", ".xls"}
+
 
 class AskRequest(BaseModel):
     question: str = Field(min_length=1)
@@ -108,13 +110,11 @@ def ask(req: AskRequest):
 
 @router.post("/upload")
 async def upload(file: UploadFile = File(...)):
-    filename = file.filename or "dataset"
+    """Accepts any file type. Production datasets (CSV/XLSX/XLS) feed the analytics
+    pipeline; every other file (PDF, PNG, JPG, DOCX, TXT, or anything else) is
+    parsed for real text where possible via the document service."""
+    filename = file.filename or "upload"
     suffix = Path(filename).suffix.lower()
-    if suffix not in {".csv", ".xlsx", ".xls"}:
-        raise HTTPException(
-            status_code=400,
-            detail="Unsupported file type. Please upload a CSV, XLSX, or XLS file.",
-        )
 
     content = await file.read()
     if not content:
@@ -126,6 +126,22 @@ async def upload(file: UploadFile = File(...)):
             status_code=413,
             detail=f"File is too large. Maximum allowed size is {settings.max_upload_mb} MB.",
         )
+
+    if suffix not in DATASET_EXTENSIONS:
+        try:
+            result = document_service.ingest_document(content, filename)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        except Exception as exc:
+            logger.exception("Unexpected error while processing uploaded document %s", filename)
+            raise HTTPException(
+                status_code=400,
+                detail=f"Could not process the uploaded document ({exc.__class__.__name__}: {exc}).",
+            ) from exc
+        message = f"{filename} processed - {result['chunk_count']} passages extracted from {result['pages']} page(s)."
+        if result["ocr_unavailable_pages"]:
+            message += f" {result['ocr_unavailable_pages']} page(s) looked scanned but OCR is not installed on this server, so no text could be extracted from them."
+        return {"ok": True, "kind": "document", "message": message, **result}
 
     try:
         safe_name = f"{Path(filename).stem}_{os.getpid()}_{Path(filename).suffix.lstrip('.')}"
@@ -158,45 +174,12 @@ async def upload(file: UploadFile = File(...)):
             f"Dataset uploaded, but the forecast model could not be trained ({exc.__class__.__name__}: {exc})."
         )
 
-    return {"ok": True, **result}
+    return {"ok": True, "kind": "dataset", **result}
 
 
 @router.post("/documents/upload")
 async def upload_document(file: UploadFile = File(...)):
-    filename = file.filename or "document"
-    suffix = Path(filename).suffix.lower()
-    if suffix not in document_service.SUPPORTED_SUFFIXES:
-        raise HTTPException(
-            status_code=400,
-            detail="Unsupported document type. Upload a PDF, PNG, or JPG file.",
-        )
-
-    content = await file.read()
-    if not content:
-        raise HTTPException(status_code=400, detail="The uploaded file is empty.")
-
-    size_mb = len(content) / (1024 * 1024)
-    if size_mb > settings.max_upload_mb:
-        raise HTTPException(
-            status_code=413,
-            detail=f"File is too large. Maximum allowed size is {settings.max_upload_mb} MB.",
-        )
-
-    try:
-        result = document_service.ingest_document(content, filename)
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except Exception as exc:
-        logger.exception("Unexpected error while processing uploaded document %s", filename)
-        raise HTTPException(
-            status_code=400,
-            detail=f"Could not process the uploaded document ({exc.__class__.__name__}: {exc}).",
-        ) from exc
-
-    message = f"{filename} processed - {result['chunk_count']} passages extracted from {result['pages']} page(s)."
-    if result["ocr_unavailable_pages"]:
-        message += f" {result['ocr_unavailable_pages']} page(s) looked scanned but OCR is not installed on this server, so no text could be extracted from them."
-    return {"ok": True, "message": message, **result}
+    return await upload(file)
 
 
 @router.delete("/documents/{doc_id}")
@@ -359,4 +342,3 @@ def documents():
 
     entries.extend(document_service.list_documents())
     return {"documents": entries, "tesseract_available": document_service.tesseract_available()}
-

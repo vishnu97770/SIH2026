@@ -220,7 +220,7 @@ def _coerce_numeric(series: pd.Series) -> tuple[pd.Series, int]:
 def _parse_date_column(df: pd.DataFrame, date_col: str | None) -> pd.Series | None:
     if not date_col:
         return None
-    parsed = pd.to_datetime(df[date_col], errors="coerce", infer_datetime_format=True)
+    parsed = pd.to_datetime(df[date_col], errors="coerce")
     if parsed.notna().sum() == 0:
         return None
     return parsed

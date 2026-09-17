@@ -30,7 +30,7 @@ class Settings:
     assistant_history_limit: int = int(os.getenv("ASSISTANT_HISTORY_LIMIT", "12"))
 
     cors_origins: str = os.getenv("CORS_ORIGINS", "http://localhost:5173")
-    max_upload_mb: int = int(os.getenv("MAX_UPLOAD_MB", "15"))
+    max_upload_mb: int = int(os.getenv("MAX_UPLOAD_MB", "25"))
 
     jwt_secret_key: str = field(default_factory=lambda: os.getenv("JWT_SECRET_KEY") or secrets.token_urlsafe(32))
 
