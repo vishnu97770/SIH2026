@@ -1,0 +1,61 @@
+{
+  "session_id": "3f68bca8afde40ea824c60e31fdd1a86",
+  "source_name": "demo_mining_dataset.csv",
+  "uploaded_at": "2026-09-15T13:50:33.625579+00:00",
+  "row_count": 12,
+  "columns": [
+    "year",
+    "mine",
+    "mineral",
+    "state",
+    "district",
+    "production",
+    "target"
+  ],
+  "column_map": {
+    "year": "year",
+    "mine": "mine",
+    "mineral": "mineral",
+    "state": "state",
+    "district": "district",
+    "production": "production",
+    "target": "target"
+  },
+  "quality": {
+    "rows": 12,
+    "columns": 7,
+    "missing_values": 0,
+    "duplicates": 0,
+    "invalid_numeric_values": 0,
+    "year_range": [
+      2019,
+      2025
+    ],
+    "mines": 2,
+    "minerals": 2,
+    "states": 2,
+    "districts": 2,
+    "quality_score": 100.0,
+    "filename": "demo_mining_dataset.csv"
+  },
+  "has_data": true,
+  "raw_columns": [
+    "year",
+    "mine",
+    "mineral",
+    "state",
+    "district",
+    "production",
+    "target"
+  ],
+  "chat_history": [],
+  "last_model": {
+    "model_name": "moving_average",
+    "metrics": {
+      "mae": 124.8333,
+      "rmse": 173.2726,
+      "mape": 14.0444
+    },
+    "trained_at": "2026-09-15T13:50:33.662602+00:00"
+  }
+}
