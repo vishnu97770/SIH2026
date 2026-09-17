@@ -9,13 +9,20 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from .config import settings
-from .api.auth import router as auth_router
+from .api.auth import router as auth_router, _seed_demo_user
 from .api.routes import router
-from .db import engine
+from .db import SessionLocal, engine
 from . import models
 
 # Initialize database tables on startup.
 models.Base.metadata.create_all(bind=engine)
+
+# Keep the credentials shown on the login screen working out of the box.
+_seed_db = SessionLocal()
+try:
+    _seed_demo_user(_seed_db)
+finally:
+    _seed_db.close()
 
 BASE_DIR = Path(__file__).resolve().parents[2]
 FRONTEND_DIST = BASE_DIR / "frontend" / "dist"

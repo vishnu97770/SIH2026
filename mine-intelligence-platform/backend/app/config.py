@@ -19,6 +19,7 @@ class Settings:
     database_path: str = os.getenv("DATABASE_PATH", os.path.join(BASE_DIR, "data", "app.db"))
     data_dir: str = os.getenv("DATA_DIR", os.path.join(BASE_DIR, "data"))
     upload_dir: str = os.getenv("UPLOAD_DIR", os.path.join(BASE_DIR, "data", "uploads"))
+    documents_dir: str = os.getenv("DOCUMENTS_DIR", os.path.join(BASE_DIR, "data", "documents"))
     reports_dir: str = os.getenv("REPORTS_DIR", os.path.join(BASE_DIR, "data", "reports"))
     models_dir: str = os.getenv("MODELS_DIR", os.path.join(BASE_DIR, "models"))
 

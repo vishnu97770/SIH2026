@@ -224,4 +224,7 @@ node_modules/
 # dataset a user currently has loaded.
 backend/data/runtime/
 backend/data/uploads/
+backend/data/documents/
+backend/data/reports/
 backend/models/*.pkl
+backend/*.db

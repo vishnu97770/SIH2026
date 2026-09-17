@@ -17,6 +17,7 @@ from ..data.knowledge_base import KNOWLEDGE_BASE
 from .analytics import aggregate_yearly_series, kpis, production_series
 from .anomaly import detect_anomalies
 from .data_service import get_dataframe, get_filter_options, get_session, has_data, save_chat_turn, set_last_topic
+from .document_service import get_all_chunks
 from .forecast import forecast
 
 logger = logging.getLogger(__name__)
@@ -279,19 +280,32 @@ def _topic_hint(question: str) -> str:
 _WORD_RE = re.compile(r"[a-z0-9.]+")
 
 
+def _document_corpus() -> list[tuple[dict[str, Any], bool]]:
+    """Combined retrieval corpus: real user-uploaded document chunks (from
+    document_service, extracted from PDFs/images) plus the static demo
+    knowledge base as a fallback when nothing has been uploaded yet. Each
+    item is (entry, is_real) so real evidence can be preferred over demo
+    content when both match."""
+    corpus = [(entry, True) for entry in get_all_chunks() if entry.get("text", "").strip()]
+    corpus.extend((entry, False) for entry in KNOWLEDGE_BASE)
+    return corpus
+
+
 def retrieve_documents(question: str, top_k: int = 3, min_score: int = 2) -> list[dict[str, Any]]:
     question_words = set(_WORD_RE.findall(question.lower()))
     if not question_words:
         return []
 
     scored: list[tuple[float, dict[str, Any]]] = []
-    for entry in KNOWLEDGE_BASE:
+    for entry, is_real in _document_corpus():
         text_words = set(_WORD_RE.findall(entry["text"].lower()))
         doc_words = set(_WORD_RE.findall(entry["doc"].lower()))
         overlap = len(question_words & text_words)
         doc_name_overlap = len(question_words & doc_words)
         type_bonus = 1 if entry["type"].lower() in question.lower() else 0
         score = overlap + doc_name_overlap + type_bonus
+        if is_real:
+            score += 0.5  # prefer real uploaded evidence over the demo KB when both match
         if score >= min_score:
             scored.append((score, entry))
 
@@ -313,11 +327,12 @@ def retrieve_documents(question: str, top_k: int = 3, min_score: int = 2) -> lis
 def _representative_documents(limit: int = 4) -> list[dict[str, Any]]:
     """One passage per distinct source document, used only for an explicit
     'summarize the report/documents' request when literal word-overlap
-    retrieval doesn't find a strong match. Still real KB content and real
-    citations - never fabricated."""
+    retrieval doesn't find a strong match. Still real content and real
+    citations - never fabricated. Real uploaded documents are listed before
+    the static demo knowledge base."""
     seen_docs: set[str] = set()
     hits: list[dict[str, Any]] = []
-    for entry in KNOWLEDGE_BASE:
+    for entry, _is_real in _document_corpus():
         if entry["doc"] in seen_docs:
             continue
         seen_docs.add(entry["doc"])

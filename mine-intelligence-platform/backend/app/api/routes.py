@@ -7,19 +7,22 @@ from pathlib import Path
 from typing import Any
 
 import pandas as pd
-from fastapi import APIRouter, Body, File, HTTPException, Query, UploadFile
+from fastapi import APIRouter, Body, Depends, File, HTTPException, Query, UploadFile
 from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 
 from ..config import settings
-from ..services import analytics, rag, report
+from ..services import analytics, document_service, insights, rag, report
 from ..services.anomaly import detect_anomalies
 from ..services.data_service import get_dataframe, get_filter_options, get_session, has_data, remove_dataset, set_session_from_dataframe, upload_dataset
 from ..services.forecast import forecast, train_forecast_model
+from .auth import get_current_user
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api")
+# Every route below requires a valid bearer token - this is the platform's
+# actual production/geological data, not public content.
+router = APIRouter(prefix="/api", dependencies=[Depends(get_current_user)])
 
 
 class AskRequest(BaseModel):
@@ -160,7 +163,48 @@ async def upload(file: UploadFile = File(...)):
 
 @router.post("/documents/upload")
 async def upload_document(file: UploadFile = File(...)):
-    return await upload(file)
+    filename = file.filename or "document"
+    suffix = Path(filename).suffix.lower()
+    if suffix not in document_service.SUPPORTED_SUFFIXES:
+        raise HTTPException(
+            status_code=400,
+            detail="Unsupported document type. Upload a PDF, PNG, or JPG file.",
+        )
+
+    content = await file.read()
+    if not content:
+        raise HTTPException(status_code=400, detail="The uploaded file is empty.")
+
+    size_mb = len(content) / (1024 * 1024)
+    if size_mb > settings.max_upload_mb:
+        raise HTTPException(
+            status_code=413,
+            detail=f"File is too large. Maximum allowed size is {settings.max_upload_mb} MB.",
+        )
+
+    try:
+        result = document_service.ingest_document(content, filename)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("Unexpected error while processing uploaded document %s", filename)
+        raise HTTPException(
+            status_code=400,
+            detail=f"Could not process the uploaded document ({exc.__class__.__name__}: {exc}).",
+        ) from exc
+
+    message = f"{filename} processed - {result['chunk_count']} passages extracted from {result['pages']} page(s)."
+    if result["ocr_unavailable_pages"]:
+        message += f" {result['ocr_unavailable_pages']} page(s) looked scanned but OCR is not installed on this server, so no text could be extracted from them."
+    return {"ok": True, "message": message, **result}
+
+
+@router.delete("/documents/{doc_id}")
+def delete_document(doc_id: str):
+    try:
+        return document_service.remove_document(doc_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
 
 
 @router.delete("/dataset")
@@ -290,14 +334,18 @@ def report_pdf(
     return FileResponse(path, media_type="application/pdf", filename="mine_intelligence_report.pdf")
 
 
+@router.get("/insights/wordcloud")
+def wordcloud():
+    return insights.build_wordcloud()
+
+
 @router.get("/documents")
 def documents():
     session = get_session()
-    if not has_data():
-        return {"documents": []}
+    entries: list[dict[str, Any]] = []
 
-    return {
-        "documents": [
+    if has_data():
+        entries.append(
             {
                 "id": session.session_id[:8],
                 "name": session.source_name or "Uploaded dataset",
@@ -307,6 +355,8 @@ def documents():
                 "date": session.uploaded_at[:10] if session.uploaded_at else None,
                 "quality": session.quality,
             }
-        ]
-    }
+        )
+
+    entries.extend(document_service.list_documents())
+    return {"documents": entries, "tesseract_available": document_service.tesseract_available()}
 

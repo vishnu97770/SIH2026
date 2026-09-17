@@ -12,6 +12,7 @@ import { Documents } from "./pages/Documents";
 import { Geology } from "./pages/Geology";
 import { Anomalies } from "./pages/Anomalies";
 import { Forecast } from "./pages/Forecast";
+import { WordCloud } from "./pages/WordCloud";
 
 export default function App() {
   return (
@@ -27,6 +28,7 @@ export default function App() {
               <Route path="/production" element={<Production />} />
               <Route path="/anomalies" element={<Anomalies />} />
               <Route path="/forecast" element={<Forecast />} />
+              <Route path="/insights" element={<WordCloud />} />
               <Route path="/reports" element={<Reports />} />
               <Route path="/documents" element={<Documents />} />
               <Route path="/geology" element={<Geology />} />

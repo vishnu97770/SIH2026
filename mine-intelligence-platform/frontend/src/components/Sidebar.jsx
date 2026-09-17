@@ -4,14 +4,15 @@ import { Icon } from "./Icon";
 import { useAuth } from "../context/AuthContext";
 
 const NAV = [
+  { to: "/documents", label: "Documents", icon: "documents" },
   { to: "/dashboard", label: "Dashboard", icon: "dashboard" },
   { to: "/assistant", label: "AI Mining Assistant", icon: "assistant" },
   { to: "/production", label: "Production Intelligence", icon: "production" },
   { to: "/anomalies", label: "Anomaly Detection", icon: "orange" },
   { to: "/forecast", label: "Production Forecast", icon: "trend" },
+  { to: "/insights", label: "Word Cloud & Topics", icon: "cloud" },
   { to: "/geology", label: "Geological & Map", icon: "geology" },
   { to: "/reports", label: "Intelligence Reports", icon: "reports" },
-  { to: "/documents", label: "Documents", icon: "documents" },
 ];
 
 export function Sidebar({ collapsed, onToggle }) {

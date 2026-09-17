@@ -3,36 +3,58 @@ import { useNavigate, Navigate, Link } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 
 export function Login() {
-  const { isLoggedIn, login } = useAuth();
+  const { isLoggedIn, login, register } = useAuth();
   const navigate = useNavigate();
+  const [mode, setMode] = useState("signin");
   const [email, setEmail] = useState("analyst@mining.gov.in");
   const [password, setPassword] = useState("demo1234");
   const [remember, setRemember] = useState(true);
   const [error, setError] = useState("");
+  const [submitting, setSubmitting] = useState(false);
 
   if (isLoggedIn) {
     return <Navigate to="/dashboard" replace />;
   }
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
     const validEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
     if (!validEmail) {
       setError("Please enter a valid email address.");
       return;
     }
-    if (!password) {
-      setError("Please enter your password.");
+    if (!password || password.length < 4) {
+      setError("Please enter your password (at least 4 characters).");
       return;
     }
-    if (remember) localStorage.setItem("mi_remember", "true");
-    login(email.trim());
-    navigate("/dashboard");
+    setError("");
+    setSubmitting(true);
+    try {
+      if (remember) localStorage.setItem("mi_remember", "true");
+      if (mode === "register") {
+        await register(email.trim(), password);
+      } else {
+        await login(email.trim(), password);
+      }
+      navigate("/dashboard");
+    } catch (err) {
+      setError(err.message || "Sign in failed.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
-  const handleDemoLogin = () => {
-    login("analyst@mining.gov.in");
-    navigate("/dashboard");
+  const handleDemoLogin = async () => {
+    setError("");
+    setSubmitting(true);
+    try {
+      await login("analyst@mining.gov.in", "demo1234");
+      navigate("/dashboard");
+    } catch (err) {
+      setError(err.message || "Demo login failed.");
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -101,9 +123,11 @@ export function Login() {
           </div>
 
           <div className="rounded-2xl border border-stone-200 bg-[#fffaf1] p-8 shadow-sm">
-            <h2 className="text-xl font-semibold text-stone-900">Sign in</h2>
+            <h2 className="text-xl font-semibold text-stone-900">{mode === "register" ? "Create account" : "Sign in"}</h2>
             <p className="mt-1 text-sm text-stone-500">
-              Enter your credentials to access the platform.
+              {mode === "register"
+                ? "Register with an email and password to access the platform."
+                : "Enter your credentials to access the platform."}
             </p>
 
             {error && (
@@ -161,11 +185,26 @@ export function Login() {
 
               <button
                 type="submit"
-                className="w-full rounded-lg bg-amber-600 py-2.5 text-sm font-semibold text-white transition hover:bg-amber-700 focus:outline-none focus:ring-2 focus:ring-amber-100"
+                disabled={submitting}
+                className="w-full rounded-lg bg-amber-600 py-2.5 text-sm font-semibold text-white transition hover:bg-amber-700 focus:outline-none focus:ring-2 focus:ring-amber-100 disabled:cursor-not-allowed disabled:opacity-60"
               >
-                Sign In
+                {submitting ? "Please wait..." : mode === "register" ? "Create account" : "Sign In"}
               </button>
             </form>
+
+            <p className="mt-4 text-center text-sm text-stone-500">
+              {mode === "register" ? "Already have an account?" : "Need an account?"}{" "}
+              <button
+                type="button"
+                onClick={() => {
+                  setMode((m) => (m === "register" ? "signin" : "register"));
+                  setError("");
+                }}
+                className="font-semibold text-amber-600 hover:text-amber-700"
+              >
+                {mode === "register" ? "Sign in" : "Create one"}
+              </button>
+            </p>
 
             <div className="my-5 flex items-center gap-3">
               <div className="h-px flex-1 bg-stone-200" />
@@ -175,7 +214,8 @@ export function Login() {
 
             <button
               onClick={handleDemoLogin}
-              className="w-full rounded-lg border border-stone-300 bg-[#fffaf1] py-2.5 text-sm font-semibold text-stone-700 transition hover:bg-stone-50"
+              disabled={submitting}
+              className="w-full rounded-lg border border-stone-300 bg-[#fffaf1] py-2.5 text-sm font-semibold text-stone-700 transition hover:bg-stone-50 disabled:cursor-not-allowed disabled:opacity-60"
             >
               Demo Login
             </button>

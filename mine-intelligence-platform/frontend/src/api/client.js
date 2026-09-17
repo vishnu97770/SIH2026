@@ -1,6 +1,7 @@
 const API_PREFIX = import.meta.env.VITE_API_PREFIX || "/api";
 const DATASET_EXTENSIONS = new Set(["csv", "xlsx", "xls"]);
 const MAX_UPLOAD_BYTES = 25 * 1024 * 1024;
+const TOKEN_KEY = "mi_token";
 
 export function validateDatasetFile(file) {
   if (!file) return "Choose a CSV or Excel dataset to upload.";
@@ -15,8 +16,30 @@ export function validateDatasetFile(file) {
   return "";
 }
 
+export function getToken() {
+  return localStorage.getItem(TOKEN_KEY);
+}
+
+export function setToken(token) {
+  localStorage.setItem(TOKEN_KEY, token);
+}
+
+export function clearToken() {
+  localStorage.removeItem(TOKEN_KEY);
+}
+
 async function request(path, options = {}) {
-  const res = await fetch(`${API_PREFIX}${path}`, options);
+  const token = getToken();
+  const headers = { ...(options.headers || {}) };
+  if (token) headers.Authorization = `Bearer ${token}`;
+
+  const res = await fetch(`${API_PREFIX}${path}`, { ...options, headers });
+
+  if (res.status === 401) {
+    clearToken();
+    window.dispatchEvent(new Event("mi-auth-expired"));
+  }
+
   if (!res.ok) {
     let detail = `Request failed (${res.status})`;
     try {
@@ -74,7 +97,20 @@ export function apiJson(path, method = "GET", body, extra = {}) {
   return request(path, options);
 }
 
+// FastAPI's OAuth2PasswordRequestForm (used by /auth/login) expects a
+// form-encoded body, not JSON.
+function apiForm(path, fields) {
+  return request(path, {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams(fields).toString(),
+  });
+}
+
 export const api = {
+  authLogin: (email, password) => apiForm("/auth/login", { username: email, password }),
+  authRegister: (email, password) => apiJson("/auth/register", "POST", { username: email, password }),
+  authMe: () => apiGet("/auth/me"),
   health: () => apiGet("/health"),
   session: () => apiGet("/session"),
   filters: () => apiGet("/filters"),
@@ -98,9 +134,11 @@ export const api = {
   },
   loadDemoDataset: () => apiJson("/demo/load", "POST"),
   removeDataset: () => apiJson("/dataset", "DELETE"),
+  removeDocument: (id) => apiJson(`/documents/${id}`, "DELETE"),
   retrainModels: () => apiJson("/train-models", "POST"),
   suggestions: () => apiGet("/assistant/suggestions"),
   documents: () => apiGet("/documents"),
+  wordcloud: () => apiGet("/insights/wordcloud"),
 };
 
 export { request };

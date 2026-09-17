@@ -88,9 +88,29 @@ def login(form_data: OAuth2PasswordRequestForm = Depends(), db: Session = Depend
             detail="Incorrect username or password",
             headers={"WWW-Authenticate": "Bearer"},
         )
-        
+
     access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     access_token = create_access_token(
         data={"sub": user.username}, expires_delta=access_token_expires
     )
     return {"access_token": access_token, "token_type": "bearer"}
+
+
+class UserOut(BaseModel):
+    username: str
+
+
+@router.get("/me", response_model=UserOut)
+def me(current_user: User = Depends(get_current_user)):
+    return {"username": current_user.username}
+
+
+def _seed_demo_user(db: Session) -> None:
+    """Ensure the credentials shown on the login screen actually work. This
+    only ever runs once (idempotent) - it does not reset a password an
+    operator has since changed."""
+    existing = db.query(User).filter(User.username == "analyst@mining.gov.in").first()
+    if existing:
+        return
+    db.add(User(username="analyst@mining.gov.in", password_hash=get_password_hash("demo1234")))
+    db.commit()
