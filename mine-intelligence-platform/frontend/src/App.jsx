@@ -1,5 +1,6 @@
 import { Routes, Route, Navigate } from "react-router-dom";
 import { AuthProvider } from "./context/AuthContext";
+import { AssistantChatProvider } from "./context/AssistantChatContext";
 import { ProtectedRoute } from "./components/ProtectedRoute";
 import { MainLayout } from "./layouts/MainLayout";
 import { Login } from "./pages/Login";
@@ -15,23 +16,25 @@ import { Forecast } from "./pages/Forecast";
 export default function App() {
   return (
     <AuthProvider>
-      <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route element={<ProtectedRoute />}>
-          <Route element={<MainLayout />}>
-            <Route path="/" element={<Navigate to="/dashboard" replace />} />
-            <Route path="/dashboard" element={<Dashboard />} />
-            <Route path="/assistant" element={<Assistant />} />
-            <Route path="/production" element={<Production />} />
-            <Route path="/anomalies" element={<Anomalies />} />
-            <Route path="/forecast" element={<Forecast />} />
-            <Route path="/reports" element={<Reports />} />
-            <Route path="/documents" element={<Documents />} />
-            <Route path="/geology" element={<Geology />} />
+      <AssistantChatProvider>
+        <Routes>
+          <Route path="/login" element={<Login />} />
+          <Route element={<ProtectedRoute />}>
+            <Route element={<MainLayout />}>
+              <Route path="/" element={<Navigate to="/dashboard" replace />} />
+              <Route path="/dashboard" element={<Dashboard />} />
+              <Route path="/assistant" element={<Assistant />} />
+              <Route path="/production" element={<Production />} />
+              <Route path="/anomalies" element={<Anomalies />} />
+              <Route path="/forecast" element={<Forecast />} />
+              <Route path="/reports" element={<Reports />} />
+              <Route path="/documents" element={<Documents />} />
+              <Route path="/geology" element={<Geology />} />
+            </Route>
           </Route>
-        </Route>
-        <Route path="*" element={<Navigate to="/dashboard" replace />} />
-      </Routes>
+          <Route path="*" element={<Navigate to="/dashboard" replace />} />
+        </Routes>
+      </AssistantChatProvider>
     </AuthProvider>
   );
 }

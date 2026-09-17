@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 import os
 from io import BytesIO
 from pathlib import Path
@@ -15,6 +16,8 @@ from ..services import analytics, rag, report
 from ..services.anomaly import detect_anomalies
 from ..services.data_service import get_dataframe, get_filter_options, get_session, has_data, remove_dataset, set_session_from_dataframe, upload_dataset
 from ..services.forecast import forecast, train_forecast_model
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api")
 
@@ -90,7 +93,14 @@ def suggestions():
 
 @router.post("/ask")
 def ask(req: AskRequest):
-    return rag.answer_question(req.question)
+    try:
+        return rag.answer_question(req.question)
+    except Exception as exc:
+        logger.exception("Assistant failed to answer question")
+        raise HTTPException(
+            status_code=500,
+            detail="I couldn't process that request right now. Please try again.",
+        ) from exc
 
 
 @router.post("/upload")
@@ -119,12 +129,33 @@ async def upload(file: UploadFile = File(...)):
         dest = Path(settings.upload_dir) / safe_name
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_bytes(content)
+    except OSError as exc:
+        logger.exception("Could not save uploaded file %s to %s", filename, settings.upload_dir)
+        raise HTTPException(
+            status_code=500,
+            detail="Could not save the uploaded file on the server. Check that the upload directory is writable.",
+        ) from exc
 
+    try:
         result = upload_dataset(content, filename)
-        train_forecast_model()
-        return {"ok": True, **result}
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
+    except Exception as exc:
+        logger.exception("Unexpected error while parsing uploaded file %s", filename)
+        raise HTTPException(
+            status_code=400,
+            detail=f"Could not process the uploaded file ({exc.__class__.__name__}: {exc}).",
+        ) from exc
+
+    try:
+        train_forecast_model()
+    except Exception as exc:
+        logger.exception("Forecast training failed after uploading %s", filename)
+        result["forecast_warning"] = (
+            f"Dataset uploaded, but the forecast model could not be trained ({exc.__class__.__name__}: {exc})."
+        )
+
+    return {"ok": True, **result}
 
 
 @router.post("/documents/upload")

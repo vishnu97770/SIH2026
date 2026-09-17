@@ -217,4 +217,11 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 node_modules/
-data/runtime/
+
+# Runtime dataset session, uploaded files, and trained model artifacts.
+# These are generated per-deployment and must never be committed - doing so
+# causes every checkout/clean/deploy to silently wipe or overwrite whatever
+# dataset a user currently has loaded.
+backend/data/runtime/
+backend/data/uploads/
+backend/models/*.pkl

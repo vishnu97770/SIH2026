@@ -74,6 +74,7 @@ class AnalysisSession:
     quality: dict[str, Any] = field(default_factory=dict)
     chat_history: list[dict[str, str]] = field(default_factory=list)
     last_model: dict[str, Any] = field(default_factory=dict)
+    last_topic: dict[str, Any] = field(default_factory=dict)
 
     def has_data(self) -> bool:
         return not self.clean_df.empty
@@ -114,6 +115,7 @@ def _load_persisted_session() -> None:
     SESSION.quality = meta.get("quality", {})
     SESSION.chat_history = meta.get("chat_history", [])
     SESSION.last_model = meta.get("last_model", {})
+    SESSION.last_topic = meta.get("last_topic", {})
     SESSION.clean_df = df
 
 
@@ -131,6 +133,7 @@ def save_session() -> None:
         "raw_columns": SESSION.raw_columns,
         "chat_history": SESSION.chat_history[-settings.assistant_history_limit :],
         "last_model": SESSION.last_model,
+        "last_topic": SESSION.last_topic,
     }
     SESSION_PATH.write_text(json.dumps(payload, indent=2), encoding="utf-8")
     SESSION.clean_df.to_csv(SESSION_DATA_PATH, index=False)
@@ -146,6 +149,7 @@ def clear_session() -> None:
     SESSION.quality = {}
     SESSION.chat_history = []
     SESSION.last_model = {}
+    SESSION.last_topic = {}
     SESSION.clean_df = pd.DataFrame()
     save_session()
 
@@ -326,6 +330,7 @@ def upload_dataset(file_bytes: bytes, filename: str) -> dict[str, Any]:
     SESSION.quality = quality
     SESSION.chat_history = []
     SESSION.last_model = {}
+    SESSION.last_topic = {}
     save_session()
 
     return {
@@ -414,6 +419,18 @@ def save_chat_turn(role: str, content: str) -> None:
 def set_last_model(metadata: dict[str, Any]) -> None:
     session = get_session()
     session.last_model = metadata
+    save_session()
+
+
+def get_last_topic() -> dict[str, Any]:
+    """Returns the last structured-data topic (metric/filters/value) the chatbot
+    discussed, used to resolve follow-up references like 'it' or 'what about...'."""
+    return get_session().last_topic or {}
+
+
+def set_last_topic(topic: dict[str, Any]) -> None:
+    session = get_session()
+    session.last_topic = topic
     save_session()
 
 

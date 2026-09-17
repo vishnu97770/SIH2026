@@ -7,12 +7,13 @@ from pydantic import BaseModel
 from sqlalchemy.orm import Session
 import bcrypt
 
+from ..config import settings
 from ..db import get_db
 from ..models import User
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
-SECRET_KEY = "your-secret-key-for-development"
+SECRET_KEY = settings.jwt_secret_key
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7 # 1 week
 

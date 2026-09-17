@@ -95,6 +95,8 @@ export function Icon({ name, className = "h-5 w-5" }) {
         <path d="M3 12l9 5 9-5M3 16l9 5 9-5" strokeLinejoin="round" />
       </>
     ),
+    plus: <path d="M12 5v14M5 12h14" strokeLinecap="round" />,
+    close: <path d="M6 6l12 12M18 6L6 18" strokeLinecap="round" />,
   };
 
   const d = paths[name];

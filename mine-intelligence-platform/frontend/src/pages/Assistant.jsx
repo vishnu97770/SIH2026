@@ -2,16 +2,26 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "../api/client";
 import { Icon } from "../components/Icon";
 import { formatNumber } from "../utils/format";
+import { useAssistantChat } from "../context/AssistantChatContext";
 
 export function Assistant() {
   const [suggestions, setSuggestions] = useState([]);
   const [session, setSession] = useState(null);
-  const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState("");
   const [selectedCitation, setSelectedCitation] = useState(null);
   const endRef = useRef(null);
+  const {
+    conversations,
+    activeConversation,
+    loading,
+    error,
+    sendQuestion: sendToActiveConversation,
+    newConversation,
+    switchConversation,
+    closeConversation,
+    clearActiveConversation,
+  } = useAssistantChat();
+  const messages = activeConversation.messages;
 
   useEffect(() => {
     const load = async () => {
@@ -38,30 +48,8 @@ export function Assistant() {
   const sendQuestion = async (question) => {
     const q = (question ?? input).trim();
     if (!q || loading) return;
-
-    setMessages((current) => [...current, { role: "user", text: q }]);
     setInput("");
-    setLoading(true);
-    setError("");
-
-    try {
-      const res = await api.askAssistant(q);
-      setMessages((current) => [
-        ...current,
-        {
-          role: "assistant",
-          text: res.answer,
-          citations: res.citations || [],
-          grounding: res.grounding,
-          context: res.context,
-        },
-      ]);
-    } catch (err) {
-      setMessages((current) => [...current, { role: "error", text: err.message || "Chat failed." }]);
-      setError(err.message || "Chat failed.");
-    } finally {
-      setLoading(false);
-    }
+    await sendToActiveConversation(q);
   };
 
   return (
@@ -72,14 +60,56 @@ export function Assistant() {
 
       <div className="flex min-h-[70vh] flex-col rounded-3xl border border-stone-200 bg-[#fffaf1] shadow-sm">
         <div className="border-b border-stone-200 px-5 py-4">
-          <div className="flex items-center gap-2 text-sm font-semibold text-stone-800">
-            <Icon name="assistant" className="h-4 w-4 text-amber-600" />
-            AI Mining Assistant
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-sm font-semibold text-stone-800">
+              <Icon name="assistant" className="h-4 w-4 text-amber-600" />
+              AI Mining Assistant
+            </div>
+            <button
+              type="button"
+              onClick={newConversation}
+              className="flex items-center gap-1.5 rounded-xl bg-amber-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-amber-500"
+            >
+              <Icon name="plus" className="h-3.5 w-3.5" />
+              New chat
+            </button>
           </div>
           <p className="mt-1 text-xs text-stone-500">
             Ask grounded questions about the uploaded dataset. The backend calculates the numbers
             first and Groq explains the result.
           </p>
+
+          {conversations.length > 1 && (
+            <div className="mt-3 flex flex-wrap gap-1.5">
+              {conversations.map((conversation) => (
+                <div
+                  key={conversation.id}
+                  className={`group flex items-center gap-1 rounded-full border px-3 py-1 text-xs font-medium transition ${
+                    conversation.id === activeConversation.id
+                      ? "border-amber-400 bg-amber-50 text-amber-800"
+                      : "border-stone-200 bg-white text-stone-600 hover:border-amber-200"
+                  }`}
+                >
+                  <button
+                    type="button"
+                    onClick={() => switchConversation(conversation.id)}
+                    className="max-w-[10rem] truncate"
+                    title={conversation.title}
+                  >
+                    {conversation.title}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => closeConversation(conversation.id)}
+                    className="text-stone-400 opacity-0 transition group-hover:opacity-100 hover:text-red-500"
+                    aria-label={`Close ${conversation.title}`}
+                  >
+                    <Icon name="close" className="h-3 w-3" />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-5 py-4">
@@ -118,11 +148,18 @@ export function Assistant() {
             }}
             className="flex gap-2"
           >
-            <input
+            <textarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
-              placeholder="Ask about production, anomalies, targets, or forecast..."
-              className="flex-1 rounded-xl border border-stone-300 px-3.5 py-2.5 text-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
+              onKeyDown={(e) => {
+                if (e.key === "Enter" && !e.shiftKey) {
+                  e.preventDefault();
+                  sendQuestion();
+                }
+              }}
+              placeholder="Ask about production, anomalies, targets, or forecast... (Shift+Enter for a new line)"
+              rows={1}
+              className="flex-1 resize-none rounded-xl border border-stone-300 px-3.5 py-2.5 text-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
             />
             <button
               type="submit"
@@ -164,7 +201,7 @@ export function Assistant() {
           <div className="mt-4 flex gap-2">
             <button
               type="button"
-              onClick={() => setMessages([])}
+              onClick={clearActiveConversation}
               className="flex-1 rounded-xl border border-stone-300 px-3 py-2 text-sm font-semibold text-stone-700 transition hover:bg-stone-50"
             >
               Clear conversation
