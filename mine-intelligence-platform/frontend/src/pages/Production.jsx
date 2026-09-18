@@ -1,13 +1,11 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   Area,
   AreaChart,
   Bar,
   BarChart,
   CartesianGrid,
-  ComposedChart,
   Legend,
-  Line,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -34,8 +32,6 @@ export function Production() {
   const [error, setError] = useState("");
   const [kpis, setKpis] = useState(null);
   const [production, setProduction] = useState(null);
-  const [anomalies, setAnomalies] = useState(null);
-  const [forecast, setForecast] = useState(null);
 
   const load = async (nextFilters = filters) => {
     setLoading(true);
@@ -45,17 +41,10 @@ export function Production() {
       const query = Object.fromEntries(
         Object.entries(nextFilters).filter(([, value]) => value !== "" && value != null)
       );
-      const [kp, prod, anom, fc] = await Promise.all([
-        api.kpis(query),
-        api.production(query),
-        api.anomalies(query),
-        api.forecast({ ...query, horizon: 3 }),
-      ]);
+      const [kp, prod] = await Promise.all([api.kpis(query), api.production(query)]);
       setMeta(session.filters || meta);
       setKpis(kp);
       setProduction(prod);
-      setAnomalies(anom);
-      setForecast(fc);
     } catch (err) {
       setError(err.message || "Could not load production analytics.");
     } finally {
@@ -71,21 +60,10 @@ export function Production() {
   const trend = production?.historical || [];
   const targetRows = trend.filter((row) => row.target != null);
   const topMines = production?.production_by_mine || [];
-  const anomalyRows = anomalies?.anomalies || [];
-  const forecastRows = forecast?.forecast || [];
-
-  const forecastSeries = useMemo(() => {
-    const hist = trend.map((row) => ({ year: row.year, actual: row.production }));
-    const future = forecastRows.map((row) => ({
-      year: row.year,
-      predicted: row.predicted_production,
-      lower: row.lower_bound,
-      upper: row.upper_bound,
-    }));
-    return [...hist, ...future];
-  }, [forecastRows, trend]);
-
-  const primaryAnomaly = anomalies?.primary;
+  const topMinerals = production?.production_by_mineral || [];
+  const topStates = production?.production_by_state || [];
+  const topDistricts = production?.production_by_district || [];
+  const topPerformer = topMines[0];
 
   return (
     <div className="space-y-6">
@@ -98,8 +76,9 @@ export function Production() {
             </div>
             <h2 className="mt-4 text-3xl font-semibold">Operational trend analysis</h2>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-stone-300">
-              Inspect annual production, targets, anomalies, and forecast output. Use the filters to
-              update the analysis without leaving the page.
+              Inspect annual production, targets, and multi-dimensional breakdowns by mine,
+              mineral, state, and district. Use the filters to update the analysis without leaving
+              the page.
             </p>
           </div>
           <div className="flex flex-wrap gap-3">
@@ -109,20 +88,6 @@ export function Production() {
               className="rounded-xl bg-amber-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-amber-400"
             >
               Refresh
-            </button>
-            <button
-              type="button"
-              onClick={async () => {
-                try {
-                  await api.retrainModels();
-                  await load(filters);
-                } catch (err) {
-                  setError(err.message || "Could not retrain the model.");
-                }
-              }}
-              className="rounded-xl border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/10"
-            >
-              Retrain Forecast Model
             </button>
           </div>
         </div>
@@ -182,11 +147,11 @@ export function Production() {
           footer="Statistical outliers"
         />
         <KpiCard
-          label="Forecast Model"
-          value={forecast?.model || "Pending"}
+          label="Top Performer"
+          value={topPerformer ? topPerformer.mine : "N/A"}
           icon={<Icon name="target" />}
           accent="violet"
-          footer={forecast?.metrics?.mae != null ? `MAE ${forecast.metrics.mae}` : "No model yet"}
+          footer={topPerformer ? `${formatNumber(topPerformer.production)} t produced` : "No data yet"}
         />
       </div>
 
@@ -226,80 +191,52 @@ export function Production() {
             </ResponsiveContainer>
           </ChartBox>
         </ChartCard>
-
-        <ChartCard title="Forecast" className="xl:col-span-2" action={<span className="text-xs text-stone-400">{forecast?.model || "No model"}</span>}>
-          <ChartBox loading={loading} empty={!forecastRows.length}>
-            <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart data={forecastSeries}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e7dfd4" vertical={false} />
-                <XAxis dataKey="year" tick={{ fontSize: 12, fill: "#6b5c4b" }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 11, fill: "#6b5c4b" }} axisLine={false} tickLine={false} width={56} />
-                <Tooltip formatter={(value) => formatNumber(value)} contentStyle={{ borderRadius: 12, border: "1px solid #e7dfd4" }} />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Area dataKey="upper" name="Upper bound" stroke="none" fill="#f5d28a" fillOpacity={0.35} />
-                <Area dataKey="lower" name="Lower bound" stroke="none" fill="#f5d28a" fillOpacity={0.15} />
-                <Line type="monotone" dataKey="actual" name="Historical" stroke="#a16207" strokeWidth={2} dot={{ r: 3 }} connectNulls />
-                <Line type="monotone" dataKey="predicted" name="Forecast" stroke="#d97706" strokeWidth={2} strokeDasharray="5 5" dot={{ r: 3 }} connectNulls />
-              </ComposedChart>
-            </ResponsiveContainer>
-          </ChartBox>
-          {forecast?.metrics && (
-            <div className="mt-3 rounded-xl border border-stone-200 bg-stone-50 p-3 text-xs text-stone-500">
-              MAE {forecast.metrics.mae ?? "N/A"} | RMSE {forecast.metrics.rmse ?? "N/A"} | MAPE {forecast.metrics.mape ?? "N/A"}
-            </div>
-          )}
-        </ChartCard>
       </div>
 
       <div className="grid gap-4 xl:grid-cols-2">
-        <ChartCard title="Top Mines">
-          <ChartBox loading={loading} empty={!topMines.length}>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={topMines} layout="vertical" margin={{ left: 10, right: 10 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e7dfd4" horizontal={false} />
-                <XAxis type="number" tick={{ fontSize: 11, fill: "#6b5c4b" }} axisLine={false} tickLine={false} />
-                <YAxis type="category" dataKey="mine" tick={{ fontSize: 11, fill: "#6b5c4b" }} width={110} axisLine={false} tickLine={false} />
-                <Tooltip formatter={(value) => formatNumber(value)} contentStyle={{ borderRadius: 12, border: "1px solid #e7dfd4" }} />
-                <Bar dataKey="production" fill="#0f766e" radius={[0, 6, 6, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </ChartBox>
-        </ChartCard>
-
-        <ChartCard title="Anomaly Highlights" action={<span className="text-xs text-stone-400">{anomalyRows.length} flagged</span>}>
-          <div className="space-y-3">
-            {anomalyRows.length ? (
-              anomalyRows.map((item) => (
-                <div key={item.year} className="rounded-xl border border-stone-200 bg-white px-4 py-3">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <div className="text-sm font-semibold text-stone-800">{item.year}</div>
-                      <div className="mt-1 text-xs text-stone-500">{item.reason}</div>
-                    </div>
-                    <span className="rounded-full bg-red-50 px-2.5 py-1 text-xs font-semibold text-red-700">
-                      {item.severity}
-                    </span>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div className="rounded-2xl border border-dashed border-stone-200 bg-stone-50 px-4 py-8 text-center text-sm text-stone-500">
-                No anomalies were detected for the selected filter combination.
-              </div>
-            )}
-          </div>
-          {primaryAnomaly && (
-            <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4">
-              <div className="text-sm font-semibold text-red-800">Primary anomaly</div>
-              <div className="mt-2 text-sm text-red-700">{primaryAnomaly.reason}</div>
-              <div className="mt-3 text-xs text-red-700">
-                Actual {formatNumber(primaryAnomaly.actual)} | Expected {formatNumber(primaryAnomaly.expected)} | Deviation {formatPercent(primaryAnomaly.deviation_pct)}
-              </div>
-            </div>
-          )}
-        </ChartCard>
+        <BreakdownChart title="Production by Mine" data={topMines} dataKey="mine" loading={loading} color="#0f766e" />
+        <BreakdownChart title="Production by Mineral" data={topMinerals} dataKey="mineral" loading={loading} color="#b45309" />
+        <BreakdownChart title="Production by State" data={topStates} dataKey="state" loading={loading} color="#7c3aed" />
+        <BreakdownChart title="Production by District" data={topDistricts} dataKey="district" loading={loading} color="#0369a1" />
       </div>
     </div>
+  );
+}
+
+function shortenLabel(value) {
+  if (typeof value !== "string") return value;
+  const match = value.match(/\(([^)]+)\)\s*$/);
+  if (match) return match[1];
+  return value.length > 16 ? `${value.slice(0, 15)}...` : value;
+}
+
+function BreakdownChart({ title, data, dataKey, loading, color }) {
+  return (
+    <ChartCard title={title}>
+      <ChartBox loading={loading} empty={!data.length}>
+        <ResponsiveContainer width="100%" height="100%">
+          <BarChart data={data} layout="vertical" margin={{ left: 10, right: 10 }}>
+            <CartesianGrid strokeDasharray="3 3" stroke="#e7dfd4" horizontal={false} />
+            <XAxis type="number" tick={{ fontSize: 11, fill: "#6b5c4b" }} axisLine={false} tickLine={false} />
+            <YAxis
+              type="category"
+              dataKey={dataKey}
+              tickFormatter={shortenLabel}
+              tick={{ fontSize: 11, fill: "#6b5c4b" }}
+              width={90}
+              axisLine={false}
+              tickLine={false}
+            />
+            <Tooltip
+              formatter={(value) => formatNumber(value)}
+              labelFormatter={(label) => label}
+              contentStyle={{ borderRadius: 12, border: "1px solid #e7dfd4" }}
+            />
+            <Bar dataKey="production" fill={color} radius={[0, 6, 6, 0]} />
+          </BarChart>
+        </ResponsiveContainer>
+      </ChartBox>
+    </ChartCard>
   );
 }
 
@@ -332,4 +269,3 @@ function ChartBox({ loading, empty, children }) {
   }
   return <div className="h-[300px]">{children}</div>;
 }
-

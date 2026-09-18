@@ -11,7 +11,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { api, validateDatasetFile } from "../api/client";
+import { api } from "../api/client";
 import { ChartCard } from "../components/ChartCard";
 import { KpiCard } from "../components/KpiCard";
 import { Icon } from "../components/Icon";
@@ -27,7 +27,6 @@ const EMPTY_FILTERS = {
 
 const initialState = {
   loading: true,
-  uploading: false,
   error: "",
   message: "",
   session: null,
@@ -96,46 +95,6 @@ export function Dashboard() {
     loadDashboard(EMPTY_FILTERS);
   };
 
-  const handleUpload = async (file) => {
-    if (!file) return;
-    const validationError = validateDatasetFile(file);
-    if (validationError) {
-      setState((prev) => ({ ...prev, error: validationError, message: "" }));
-      return;
-    }
-    setState((prev) => ({ ...prev, uploading: true, error: "", message: "" }));
-    try {
-      const result = await api.uploadDataset(file);
-      const message =
-        result.kind === "document"
-          ? `${file.name} uploaded and added to the document library. Status: ${result.document?.status || "Processed"}.`
-          : `${file.name} uploaded successfully. Forecast and anomaly models were refreshed.`;
-      setState((prev) => ({ ...prev, message }));
-      await loadDashboard(filters);
-    } catch (err) {
-      setState((prev) => ({
-        ...prev,
-        error: err.message || "Upload failed.",
-      }));
-    } finally {
-      setState((prev) => ({ ...prev, uploading: false }));
-    }
-  };
-
-  const removeDataset = async () => {
-    if (!window.confirm("Remove the active dataset and all of its analysis results?")) return;
-    setState((prev) => ({ ...prev, uploading: true, error: "", message: "" }));
-    try {
-      const result = await api.removeDataset();
-      setState((prev) => ({ ...prev, message: result.message || "Dataset removed." }));
-      await loadDashboard(EMPTY_FILTERS);
-    } catch (err) {
-      setState((prev) => ({ ...prev, error: err.message || "Could not remove the dataset." }));
-    } finally {
-      setState((prev) => ({ ...prev, uploading: false }));
-    }
-  };
-
   const quality = state.session?.quality || {};
   const prod = state.production || { historical: [] };
   const yearlyTrend = prod.historical || [];
@@ -175,95 +134,16 @@ export function Dashboard() {
 
   return (
     <div className="space-y-6">
-      <div className="overflow-hidden rounded-3xl border border-amber-200 bg-gradient-to-r from-stone-950 via-stone-900 to-amber-950 px-6 py-6 text-white shadow-xl">
-        <div className="grid gap-6 lg:grid-cols-[1.4fr,0.9fr]">
-          <div className="space-y-4">
-            <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs text-amber-100">
-              <Icon name="dashboard" className="h-4 w-4" />
-              Mine Intelligence Platform
-            </div>
-            <div>
-              <h2 className="text-3xl font-semibold tracking-tight">AI-powered mining production intelligence</h2>
-              <p className="mt-2 max-w-2xl text-sm leading-6 text-stone-300">
-                Upload a spreadsheet to see charts and numbers. Upload any other file
-                so the AI Assistant can read it and answer questions about it.
-              </p>
-            </div>
-            {state.message && (
-              <div className="rounded-2xl border border-emerald-400/30 bg-emerald-400/10 px-4 py-3 text-sm text-emerald-50">
-                {state.message}
-              </div>
-            )}
-            {state.error && (
-              <div className="rounded-2xl border border-red-400/30 bg-red-400/10 px-4 py-3 text-sm text-red-50">
-                {state.error}
-              </div>
-            )}
-            <div className="flex flex-wrap gap-3">
-              <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-amber-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-amber-400">
-                {state.uploading ? "Uploading..." : "Upload File"}
-                <input
-                  type="file"
-                  className="hidden"
-                  onChange={(e) => handleUpload(e.target.files?.[0])}
-                />
-              </label>
-              <button
-                type="button"
-                onClick={async () => {
-                  setState((prev) => ({ ...prev, uploading: true, error: "" }));
-                  try {
-                    const res = await api.loadDemoDataset();
-                    setState((prev) => ({
-                      ...prev,
-                      message: res.message || "Demo dataset loaded.",
-                    }));
-                    await loadDashboard(EMPTY_FILTERS);
-                  } catch (err) {
-                    setState((prev) => ({ ...prev, error: err.message || "Could not load demo dataset." }));
-                  } finally {
-                    setState((prev) => ({ ...prev, uploading: false }));
-                  }
-                }}
-                className="rounded-xl border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/10"
-              >
-                Load Demo Dataset
-              </button>
-              <button
-                type="button"
-                onClick={applyFilters}
-                className="rounded-xl border border-white/15 bg-white/5 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-white/10"
-              >
-                Refresh Analysis
-              </button>
-              <button type="button" onClick={removeDataset} disabled={state.uploading || !state.session?.session?.has_data} className="rounded-xl border border-red-300/40 bg-red-500/10 px-4 py-2.5 text-sm font-semibold text-red-100 transition hover:bg-red-500/20 disabled:cursor-not-allowed disabled:opacity-40">
-                Remove Dataset
-              </button>
-            </div>
-          </div>
-
-          <div className="rounded-2xl border border-white/10 bg-white/5 p-4 backdrop-blur">
-            <div className="text-xs uppercase tracking-[0.2em] text-amber-100/70">Dataset session</div>
-            <div className="mt-3 space-y-2 text-sm text-stone-200">
-              <Row label="Source" value={state.session?.session?.source_name || "No dataset"} />
-              <Row label="Rows" value={formatNumber(quality.rows)} />
-              <Row label="Quality" value={`${quality.quality_score ?? "N/A"} / 100`} />
-              <Row label="Years" value={quality.year_range ? quality.year_range.join(" - ") : "N/A"} />
-            </div>
-            <div className="mt-4 rounded-xl border border-white/10 bg-stone-950/40 p-3">
-              <div className="text-xs uppercase tracking-[0.2em] text-stone-400">Filters applied</div>
-              <div className="mt-2 text-sm text-stone-200">
-                {Object.values(filters).some(Boolean)
-                  ? Object.entries(filters)
-                      .filter(([, value]) => value)
-                      .map(([key, value]) => `${key}: ${value}`)
-                      .join(" | ")
-                  : "All records"}
-              </div>
-            </div>
-          </div>
+      {state.message && (
+        <div className="rounded-2xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+          {state.message}
         </div>
-      </div>
+      )}
+      {state.error && (
+        <div className="rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+          {state.error}
+        </div>
+      )}
 
       <div className="rounded-2xl border border-stone-200 bg-[#fffaf1] p-4 shadow-sm">
         <div className="grid gap-3 md:grid-cols-5">
@@ -406,103 +286,7 @@ export function Dashboard() {
         </ChartCard>
       </div>
 
-      <div className="grid gap-4 xl:grid-cols-3">
-        <ChartCard title="Production by Mine">
-          <ChartShell loading={state.loading} empty={!topMineRows.length}>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={topMineRows} layout="vertical" margin={{ left: 10, right: 10 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e7dfd4" horizontal={false} />
-                <XAxis type="number" tick={{ fontSize: 11, fill: "#6b5c4b" }} axisLine={false} tickLine={false} />
-                <YAxis type="category" dataKey="mine" tick={{ fontSize: 11, fill: "#6b5c4b" }} width={110} axisLine={false} tickLine={false} />
-                <Tooltip formatter={(value) => formatNumber(value)} contentStyle={{ borderRadius: 12, border: "1px solid #e7dfd4" }} />
-                <Bar dataKey="production" fill="#d97706" radius={[0, 6, 6, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </ChartShell>
-        </ChartCard>
 
-        <ChartCard title="Production by Mineral">
-          <ChartShell loading={state.loading} empty={!topMineralRows.length}>
-            <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={topMineralRows} layout="vertical" margin={{ left: 10, right: 10 }}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e7dfd4" horizontal={false} />
-                <XAxis type="number" tick={{ fontSize: 11, fill: "#6b5c4b" }} axisLine={false} tickLine={false} />
-                <YAxis type="category" dataKey="mineral" tick={{ fontSize: 11, fill: "#6b5c4b" }} width={110} axisLine={false} tickLine={false} />
-                <Tooltip formatter={(value) => formatNumber(value)} contentStyle={{ borderRadius: 12, border: "1px solid #e7dfd4" }} />
-                <Bar dataKey="production" fill="#0f766e" radius={[0, 6, 6, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
-          </ChartShell>
-        </ChartCard>
-
-        <ChartCard title="Dataset Quality">
-          <div className="space-y-3">
-            <Metric label="Rows" value={formatNumber(quality.rows)} />
-            <Metric label="Missing values" value={formatNumber(quality.missing_values)} />
-            <Metric label="Duplicates" value={formatNumber(quality.duplicates)} />
-            <Metric label="Quality score" value={`${quality.quality_score ?? "N/A"} / 100`} />
-            <Metric label="Mines / Minerals" value={`${quality.mines ?? 0} / ${quality.minerals ?? 0}`} />
-          </div>
-        </ChartCard>
-      </div>
-
-      <div className="grid gap-4 xl:grid-cols-2">
-        <ChartCard title="Anomaly Timeline" action={<span className="text-xs text-stone-400">{anomalyRows.length} signals</span>}>
-          <div className="space-y-3">
-            {anomalyRows.length ? (
-              anomalyRows.map((item) => (
-                <div key={item.year} className="rounded-xl border border-stone-200 bg-white px-4 py-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <div className="text-sm font-semibold text-stone-800">{item.year}</div>
-                      <div className="mt-1 text-xs text-stone-500">{item.reason}</div>
-                    </div>
-                    <div className="text-right">
-                      <div className="text-sm font-semibold text-stone-800">{item.severity}</div>
-                      <div className="text-xs text-stone-500">{formatPercent(item.deviation_pct)}</div>
-                    </div>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <EmptyState message="No anomalies detected for the current filter set." />
-            )}
-          </div>
-        </ChartCard>
-
-        <ChartCard title="Recent Documents" action={<span className="text-xs text-stone-400">{state.documents.length} files</span>}>
-          <div className="space-y-3">
-            {state.documents.length ? (
-              state.documents.map((doc) => (
-                <div key={doc.id} className="rounded-xl border border-stone-200 bg-white px-4 py-3">
-                  <div className="flex items-center justify-between gap-3">
-                    <div>
-                      <div className="text-sm font-semibold text-stone-800">{doc.name}</div>
-                      <div className="mt-1 text-xs text-stone-500">
-                        {doc.type} | {doc.date || "N/A"} | {doc.records ?? "N/A"} records
-                      </div>
-                    </div>
-                    <span className="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">
-                      {doc.status}
-                    </span>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <EmptyState message="Upload a dataset to see it listed here." />
-            )}
-          </div>
-        </ChartCard>
-      </div>
-    </div>
-  );
-}
-
-function Row({ label, value }) {
-  return (
-    <div className="flex items-center justify-between gap-4">
-      <span className="text-stone-400">{label}</span>
-      <span className="font-medium text-white">{value}</span>
     </div>
   );
 }

@@ -138,6 +138,7 @@ export const api = {
   loadDemoDataset: () => apiJson("/demo/load", "POST"),
   removeDataset: () => apiJson("/dataset", "DELETE"),
   removeDocument: (id) => apiJson(`/documents/${id}`, "DELETE"),
+  documentFile: (id) => request(`/documents/${id}/file`, { method: "GET" }),
   retrainModels: () => apiJson("/train-models", "POST"),
   suggestions: () => apiGet("/assistant/suggestions"),
   documents: () => apiGet("/documents"),

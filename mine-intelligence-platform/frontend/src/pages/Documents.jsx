@@ -4,14 +4,8 @@ import { ChartCard } from "../components/ChartCard";
 import { Icon } from "../components/Icon";
 import { formatDateTime, formatNumber } from "../utils/format";
 
-const DOCUMENT_EXTENSIONS = new Set(["pdf", "png", "jpg", "jpeg"]);
-
 function validateDocumentFile(file) {
-  if (!file) return "Choose a PDF, PNG, or JPG document to upload.";
-  const extension = file.name?.split(".").pop()?.toLowerCase();
-  if (!DOCUMENT_EXTENSIONS.has(extension)) {
-    return "Unsupported file type. Upload a PDF, PNG, or JPG document.";
-  }
+  if (!file) return "Choose a document to upload.";
   if (file.size > 25 * 1024 * 1024) {
     return "File is too large. The maximum upload size is 25 MB.";
   }
@@ -61,8 +55,12 @@ export function Documents() {
     setError("");
     setMessage("");
     try {
-      await api.uploadDataset(file);
-      setMessage(`${file.name} uploaded successfully.`);
+      const result = await api.uploadDataset(file);
+      setMessage(
+        result.kind === "document"
+          ? result.message || `${file.name} processed.`
+          : `${file.name} uploaded successfully.`
+      );
       await load();
     } catch (err) {
       setError(err.message || "Upload failed.");
@@ -71,25 +69,13 @@ export function Documents() {
     }
   };
 
-  const uploadDocument = async (file) => {
-    if (!file) return;
-    const validationError = validateDocumentFile(file);
-    if (validationError) {
-      setError(validationError);
-      setMessage("");
-      return;
-    }
-    setUploadingDoc(true);
-    setError("");
-    setMessage("");
+  const openDocument = async (id) => {
     try {
-      const result = await api.uploadDocument(file);
-      setMessage(result.message || `${file.name} processed.`);
-      await load();
+      const blob = await api.documentFile(id);
+      const url = URL.createObjectURL(blob);
+      window.open(url, "_blank");
     } catch (err) {
-      setError(err.message || "Document processing failed.");
-    } finally {
-      setUploadingDoc(false);
+      setError(err.message || "Could not open the document.");
     }
   };
 
@@ -115,16 +101,16 @@ export function Documents() {
         </div>
         <h2 className="mt-4 text-3xl font-semibold">Upload and manage analysis sessions</h2>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-stone-300">
-          Upload a production dataset in CSV, XLSX, or XLS format. The backend will validate,
-          clean, analyze, and persist the active session.
+          Upload any mining file. CSV/XLSX/XLS spreadsheets feed the analytics dashboard;
+          any other mining-related file (PDF, DOCX, TXT, images) is parsed for real text
+          and added to the searchable document library.
         </p>
         <div className="mt-4 flex flex-wrap gap-3">
           <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-amber-500 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-amber-400">
-            {uploading ? "Uploading..." : "Upload Dataset"}
+            {uploading ? "Uploading..." : "Upload File"}
             <input
               ref={inputRef}
               type="file"
-              accept=".csv,.xlsx,.xls"
               className="hidden"
               onChange={(e) => upload(e.target.files?.[0])}
             />
@@ -159,38 +145,12 @@ export function Documents() {
         </div>
       </div>
 
-      <div className="rounded-3xl border border-stone-200 bg-[#fffaf1] p-6 shadow-sm">
-        <div className="inline-flex items-center gap-2 rounded-full border border-stone-200 bg-white px-3 py-1 text-xs text-stone-500">
-          <Icon name="file" className="h-4 w-4 text-amber-600" />
-          Document ingestion
+      {!tesseractAvailable && (
+        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-800">
+          OCR (tesseract) is not installed on this server, so scanned/image-only pages won't
+          extract text - only digital, selectable-text files will be readable.
         </div>
-        <h3 className="mt-3 text-lg font-semibold text-stone-800">Upload geological, inspection, or other reports</h3>
-        <p className="mt-1 max-w-2xl text-sm leading-6 text-stone-500">
-          PDF, PNG, or JPG. Text is extracted directly from digital PDFs; scanned pages fall back to
-          OCR when it's available on this server. Extracted passages become searchable, citable
-          evidence for the AI Mining Assistant and the word cloud/topic module.
-        </p>
-        {!tesseractAvailable && (
-          <p className="mt-2 max-w-2xl rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-            OCR (tesseract) is not installed on this server, so scanned/image-only pages won't
-            extract text - only digital, selectable-text PDFs will be readable. Run{" "}
-            <code className="rounded bg-white px-1 py-0.5">sudo apt-get install tesseract-ocr</code> on
-            the backend host to enable it.
-          </p>
-        )}
-        <div className="mt-4">
-          <label className="inline-flex cursor-pointer items-center gap-2 rounded-xl bg-stone-900 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-stone-700">
-            {uploadingDoc ? "Processing..." : "Upload Document"}
-            <input
-              ref={docInputRef}
-              type="file"
-              accept=".pdf,.png,.jpg,.jpeg"
-              className="hidden"
-              onChange={(e) => uploadDocument(e.target.files?.[0])}
-            />
-          </label>
-        </div>
-      </div>
+      )}
 
       {message && <Notice tone="green">{message}</Notice>}
       {error && <Notice tone="red">{error}</Notice>}
@@ -201,12 +161,20 @@ export function Documents() {
             <LoadingBox />
           ) : session?.has_data ? (
             <div className="space-y-3">
-              <SessionRow label="Source file" value={session.source_name || "N/A"} />
-              <SessionRow label="Uploaded at" value={formatDateTime(session.uploaded_at)} />
-              <SessionRow label="Rows" value={formatNumber(session.row_count)} />
-              <SessionRow label="Columns" value={formatNumber(session.columns?.length)} />
-              <SessionRow label="Quality score" value={`${session.quality?.quality_score ?? "N/A"} / 100`} />
-              <SessionRow label="Year range" value={session.quality?.year_range?.join(" - ") || "N/A"} />
+              <SessionRow label="Dataset file" value={session.source_name || "N/A"} />
+              <SessionRow label="Uploaded on" value={formatDateTime(session.uploaded_at)} />
+              <SessionRow label="Total records" value={formatNumber(session.row_count)} />
+              <SessionRow label="Data fields tracked" value={formatNumber(session.columns?.length)} />
+              <SessionRow label="Years covered" value={session.quality?.year_range?.join(" - ") || "N/A"} />
+              <SessionRow label="Mines covered" value={formatNumber(session.quality?.mines)} />
+              <SessionRow label="Minerals covered" value={formatNumber(session.quality?.minerals)} />
+              <SessionRow label="Data quality" value={`${session.quality?.quality_score ?? "N/A"} / 100`} />
+              {session.quality && (
+                <div className="rounded-xl border border-stone-200 bg-white px-4 py-3 text-xs text-stone-500">
+                  {formatNumber(session.quality.missing_values)} missing value(s) and{" "}
+                  {formatNumber(session.quality.duplicates)} duplicate record(s) found in this dataset.
+                </div>
+              )}
             </div>
           ) : (
             <EmptyState message="No dataset is currently loaded." />
@@ -248,6 +216,15 @@ export function Documents() {
                         >
                           {doc.status}
                         </span>
+                        {isRealDocument && (
+                          <button
+                            type="button"
+                            onClick={() => openDocument(doc.id)}
+                            className="rounded-lg px-2 py-1 text-xs font-semibold text-amber-700 transition hover:bg-amber-50"
+                          >
+                            Open
+                          </button>
+                        )}
                         {isRealDocument && (
                           <button
                             type="button"

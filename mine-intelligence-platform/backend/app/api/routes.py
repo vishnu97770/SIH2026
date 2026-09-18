@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import os
 from io import BytesIO
+import mimetypes
 from pathlib import Path
 from typing import Any
 
@@ -180,6 +181,16 @@ async def upload(file: UploadFile = File(...)):
 @router.post("/documents/upload")
 async def upload_document(file: UploadFile = File(...)):
     return await upload(file)
+
+
+@router.get("/documents/{doc_id}/file")
+def get_document_file(doc_id: str):
+    try:
+        path, original_name = document_service.get_document_file(doc_id)
+    except ValueError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    media_type, _ = mimetypes.guess_type(original_name)
+    return FileResponse(path, media_type=media_type or "application/octet-stream", filename=original_name)
 
 
 @router.delete("/documents/{doc_id}")

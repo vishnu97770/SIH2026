@@ -23,6 +23,35 @@ _TYPE_KEYWORDS = {
 }
 
 
+# Deliberately excludes words that collide with everyday or CS/AI-ML
+# vocabulary: bare "mine"/"mines" (the possessive pronoun "mine" is one of
+# the most common words in English), bare "mining" (data mining, text
+# mining), "extraction" (feature extraction), "exploration" (RL
+# exploration), "production" (software/ML "production"). Only genuinely
+# mining-specific terms and compound phrases are included.
+_MINING_RELEVANCE_KEYWORDS = (
+    "coal", "colliery", "overburden", "borehole", "opencast", "dgms", "cmpdi",
+    "coal india", "beneficiation", "quarry", "tonnage", "seam", "strata",
+    "ore", "mineral", "minerals", "geological", "geology", "excavation",
+    "royalty", "despatch", "mining lease", "mining plan", "mine plan",
+    "mining company", "mining operations", "mining industry",
+    "mining sector", "coal mine", "coal mining", "opencast mining",
+    "underground mining", "open-pit", "strip mining", "ministry of coal",
+    "ministry of mines", "ore grade", "mine closure", "drilling log",
+    "blast design", "mine site", "mining lease",
+)
+
+_MINING_RELEVANCE_PATTERN = re.compile(
+    r"\b(" + "|".join(re.escape(k) for k in _MINING_RELEVANCE_KEYWORDS) + r")\b",
+    re.IGNORECASE,
+)
+
+
+def _is_mining_related(filename: str, text: str) -> bool:
+    haystack = f"{filename} {text}"
+    return bool(_MINING_RELEVANCE_PATTERN.search(haystack))
+
+
 def tesseract_available() -> bool:
     return shutil.which("tesseract") is not None
 
@@ -153,6 +182,22 @@ def _chunk_page_text(text: str, target_chars: int = 500) -> list[str]:
     return chunks
 
 
+def _remove_existing_by_name(filename: str) -> None:
+    """Uploading a file with the same name again should replace the old
+    record, not pile up a duplicate copy of its chunks."""
+    records = _load_index()
+    remaining = []
+    for record in records:
+        if record["source_name"] == filename:
+            stored_path = Path(settings.documents_dir) / record["stored_as"]
+            if stored_path.exists():
+                stored_path.unlink()
+            continue
+        remaining.append(record)
+    if len(remaining) != len(records):
+        _save_index(remaining)
+
+
 def ingest_document(file_bytes: bytes, filename: str) -> dict[str, Any]:
     """Accepts any file type. PDF, PNG/JPG, DOCX, and TXT get real text extraction;
     anything else is still stored so it shows up in the document library, just
@@ -174,6 +219,14 @@ def ingest_document(file_bytes: bytes, filename: str) -> dict[str, Any]:
         pages = _extract_text_pages(dest)
     else:
         pages = [{"page": 1, "text": "", "ocr_used": False, "ocr_unavailable": False}]
+
+    combined_text = " ".join(p["text"] for p in pages)
+    if not _is_mining_related(filename, combined_text):
+        dest.unlink(missing_ok=True)
+        raise ValueError(
+            "This file doesn't look mining-related. Please upload geological, "
+            "production, safety, or other mining documents only."
+        )
 
     doc_type = _infer_doc_type(filename, pages)
 
@@ -197,6 +250,7 @@ def ingest_document(file_bytes: bytes, filename: str) -> dict[str, Any]:
         "ocr_unavailable_pages": ocr_unavailable_pages,
     }
 
+    _remove_existing_by_name(filename)
     records = _load_index()
     records.append(record)
     _save_index(records)
@@ -240,6 +294,18 @@ def get_all_chunks() -> list[dict[str, Any]]:
     for record in _load_index():
         chunks.extend(record["chunks"])
     return chunks
+
+
+def get_document_file(doc_id: str) -> tuple[Path, str]:
+    """Return the stored file's path and its original filename, for viewing/downloading."""
+    records = _load_index()
+    match = next((r for r in records if r["id"] == doc_id), None)
+    if match is None:
+        raise ValueError("Document not found.")
+    path = Path(settings.documents_dir) / match["stored_as"]
+    if not path.exists():
+        raise ValueError("The stored file could not be found on the server.")
+    return path, match["source_name"]
 
 
 def remove_document(doc_id: str) -> dict[str, Any]:
