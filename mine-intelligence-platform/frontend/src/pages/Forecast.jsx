@@ -1,11 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
 import {
-  Area,
-  AreaChart,
+  Bar,
+  BarChart,
   CartesianGrid,
-  ComposedChart,
   Legend,
-  Line,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -16,6 +14,32 @@ import { ChartCard } from "../components/ChartCard";
 import { Icon } from "../components/Icon";
 import { KpiCard } from "../components/KpiCard";
 import { formatNumber } from "../utils/format";
+
+const FRIENDLY_MODEL_NAMES = {
+  linear_trend: "Straight-line trend",
+  moving_average: "Moving average",
+  seasonal_naive: "Seasonal pattern",
+};
+
+function friendlyModelName(model) {
+  if (!model) return "Pending";
+  return FRIENDLY_MODEL_NAMES[model] || model;
+}
+
+function ForecastTooltip({ active, payload, label }) {
+  if (!active || !payload?.length) return null;
+  const find = (key) => payload.find((p) => p.dataKey === key)?.value;
+  const actual = find("actual");
+  const predicted = find("predicted");
+
+  return (
+    <div className="rounded-xl border border-stone-200 bg-white px-3 py-2 text-xs shadow-sm">
+      <div className="mb-1 font-semibold text-stone-800">{label}</div>
+      {actual != null && <div className="text-stone-600">Actual production: {formatNumber(actual)} t</div>}
+      {predicted != null && <div className="text-amber-700">Predicted production: {formatNumber(predicted)} t</div>}
+    </div>
+  );
+}
 
 export function Forecast() {
   const [loading, setLoading] = useState(true);
@@ -48,11 +72,15 @@ export function Forecast() {
     const future = (forecast?.forecast || []).map((row) => ({
       year: row.year,
       predicted: row.predicted_production,
-      lower: row.lower_bound,
-      upper: row.upper_bound,
     }));
     return [...historical, ...future];
   }, [forecast]);
+
+  const forecastRows = forecast?.forecast || [];
+  const mae = forecast?.metrics?.mae;
+  const rmse = forecast?.metrics?.rmse;
+  const errorRangeText =
+    mae != null && rmse != null ? `${formatNumber(Math.min(mae, rmse))} - ${formatNumber(Math.max(mae, rmse))} t` : "N/A";
 
   return (
     <div className="space-y-6">
@@ -63,10 +91,10 @@ export function Forecast() {
               <Icon name="trend" className="h-4 w-4" />
               Forecasting
             </div>
-            <h2 className="mt-4 text-3xl font-semibold">Model-based production forecast</h2>
+            <h2 className="mt-4 text-3xl font-semibold">What to expect in the coming years</h2>
             <p className="mt-2 max-w-2xl text-sm leading-6 text-stone-300">
-              The backend trains a saved time-series model and serves the forecast with confidence
-              bounds. Retraining uses the current uploaded dataset.
+              Based on the production pattern in your uploaded data, here's what the model expects
+              next - along with how far off it's typically been in the past.
             </p>
           </div>
           <div className="flex gap-3">
@@ -96,16 +124,32 @@ export function Forecast() {
         {error && <div className="mt-4 rounded-2xl border border-red-400/30 bg-red-400/10 px-4 py-3 text-sm text-red-50">{error}</div>}
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <KpiCard label="Model" value={forecast?.model || "Pending"} icon={<Icon name="target" />} accent="violet" footer="Best validated model" />
-        <KpiCard label="MAE" value={forecast?.metrics?.mae ?? "N/A"} icon={<Icon name="production" />} accent="amber" footer="Validation error" />
-        <KpiCard label="RMSE" value={forecast?.metrics?.rmse ?? "N/A"} icon={<Icon name="trend" />} accent="green" footer="Validation error" />
+      <div className="grid gap-4 sm:grid-cols-3">
+        {loading ? (
+          <div className="col-span-3 rounded-2xl border border-dashed border-stone-200 bg-stone-50 px-4 py-8 text-center text-sm text-stone-500">
+            Generating forecast...
+          </div>
+        ) : forecastRows.length ? (
+          forecastRows.map((row) => (
+            <div key={row.year} className="rounded-2xl border border-amber-200 bg-amber-50 p-5 shadow-sm">
+              <div className="text-xs font-semibold uppercase tracking-wide text-amber-700">{row.year} Forecast</div>
+              <div className="mt-2 text-3xl font-bold text-stone-900">{formatNumber(row.predicted_production)} t</div>
+              <div className="mt-1 text-xs text-stone-500">
+                Likely range: {formatNumber(row.lower_bound)} - {formatNumber(row.upper_bound)} t
+              </div>
+            </div>
+          ))
+        ) : (
+          <div className="col-span-3 rounded-2xl border border-dashed border-stone-200 bg-stone-50 px-4 py-8 text-center text-sm text-stone-500">
+            No forecast available yet.
+          </div>
+        )}
       </div>
 
       <div className="rounded-2xl border border-stone-200 bg-[#fffaf1] p-4 shadow-sm">
         <div className="flex flex-wrap items-end gap-3">
           <label className="space-y-1.5">
-            <span className="block text-xs font-semibold uppercase tracking-wide text-stone-400">Horizon</span>
+            <span className="block text-xs font-semibold uppercase tracking-wide text-stone-400">How many years ahead?</span>
             <select
               value={filters.horizon}
               onChange={(e) => setFilters((f) => ({ ...f, horizon: Number(e.target.value) }))}
@@ -128,35 +172,30 @@ export function Forecast() {
         </div>
       </div>
 
-      <ChartCard title="Forecast with Confidence Interval" action={<span className="text-xs text-stone-400">Historical + forecast</span>}>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <KpiCard label="Forecast Method" value={friendlyModelName(forecast?.model)} icon={<Icon name="target" />} accent="violet" footer="How the prediction is calculated" />
+        <KpiCard label="Typical Error" value={errorRangeText} icon={<Icon name="production" />} accent="amber" footer="How far off past predictions have usually been" />
+      </div>
+
+      <ChartCard title="Actual vs. Predicted Production" action={<span className="text-xs text-stone-400">By year</span>}>
         <ChartBox loading={loading} empty={!series.length}>
           <ResponsiveContainer width="100%" height="100%">
-            <ComposedChart data={series}>
+            <BarChart data={series}>
               <CartesianGrid strokeDasharray="3 3" stroke="#e7dfd4" vertical={false} />
               <XAxis dataKey="year" tick={{ fontSize: 12, fill: "#6b5c4b" }} axisLine={false} tickLine={false} />
               <YAxis tick={{ fontSize: 11, fill: "#6b5c4b" }} axisLine={false} tickLine={false} width={56} />
-              <Tooltip formatter={(value) => formatNumber(value)} contentStyle={{ borderRadius: 12, border: "1px solid #e7dfd4" }} />
+              <Tooltip content={<ForecastTooltip />} />
               <Legend wrapperStyle={{ fontSize: 12 }} />
-              <Area dataKey="upper" name="Upper bound" stroke="none" fill="#f5d28a" fillOpacity={0.35} />
-              <Area dataKey="lower" name="Lower bound" stroke="none" fill="#f5d28a" fillOpacity={0.15} />
-              <Line type="monotone" dataKey="actual" name="Historical" stroke="#a16207" strokeWidth={2} dot={{ r: 3 }} connectNulls />
-              <Line type="monotone" dataKey="predicted" name="Forecast" stroke="#d97706" strokeWidth={2} strokeDasharray="5 5" dot={{ r: 3 }} connectNulls />
-            </ComposedChart>
+              <Bar dataKey="actual" name="What actually happened" fill="#a16207" radius={[6, 6, 0, 0]} />
+              <Bar dataKey="predicted" name="What we expect" fill="#d97706" radius={[6, 6, 0, 0]} />
+            </BarChart>
           </ResponsiveContainer>
         </ChartBox>
+        <p className="mt-3 text-xs text-stone-400">
+          Lighter bars are estimates, not real numbers yet - see the "likely range" on each forecast
+          card above for how much they could vary.
+        </p>
       </ChartCard>
-
-      <div className="grid gap-4 sm:grid-cols-3">
-        {(forecast?.forecast || []).map((row) => (
-          <div key={row.year} className="rounded-2xl border border-stone-200 bg-[#fffaf1] p-4 shadow-sm">
-            <div className="text-xs font-semibold uppercase tracking-wide text-stone-400">{row.year} forecast</div>
-            <div className="mt-2 text-2xl font-bold text-stone-900">{formatNumber(row.predicted_production)}</div>
-            <div className="mt-1 text-xs text-stone-400">
-              {formatNumber(row.lower_bound)} - {formatNumber(row.upper_bound)}
-            </div>
-          </div>
-        ))}
-      </div>
     </div>
   );
 }
@@ -170,4 +209,3 @@ function ChartBox({ loading, empty, children }) {
   }
   return <div className="h-[360px]">{children}</div>;
 }
-

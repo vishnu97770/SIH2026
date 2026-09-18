@@ -103,22 +103,6 @@ export function Dashboard() {
   const topMineRows = prod.production_by_mine || [];
   const topMineralRows = prod.production_by_mineral || [];
 
-  const forecastChartData = useMemo(() => {
-    const hist = yearlyTrend.map((row) => ({
-      year: row.year,
-      actual: row.production,
-      type: "historical",
-    }));
-    const future = forecastRows.map((row) => ({
-      year: row.year,
-      forecast: row.predicted_production,
-      lower: row.lower_bound,
-      upper: row.upper_bound,
-      type: "forecast",
-    }));
-    return [...hist, ...future];
-  }, [forecastRows, yearlyTrend]);
-
   const targetTrend = useMemo(
     () =>
       yearlyTrend
@@ -171,7 +155,7 @@ export function Dashboard() {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-6">
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
         <KpiCard
           label="Total Production"
           value={formatNumber(state.kpis?.total_production)}
@@ -208,13 +192,6 @@ export function Dashboard() {
           icon={<Icon name="orange" />}
           accent="red"
           footer="Statistically flagged"
-        />
-        <KpiCard
-          label="Forecast"
-          value={state.forecast?.model || "Pending"}
-          icon={<Icon name="trend" />}
-          accent="violet"
-          footer={state.forecast?.metrics?.mae != null ? `MAE ${state.forecast.metrics.mae}` : "Train a model"}
         />
       </div>
 
@@ -261,29 +238,6 @@ export function Dashboard() {
           </ChartShell>
         </ChartCard>
 
-        <ChartCard title="Forecast with Confidence Band" className="xl:col-span-2">
-          <ChartShell loading={state.loading} empty={!forecastRows.length}>
-            <ResponsiveContainer width="100%" height="100%">
-              <AreaChart data={forecastChartData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#e7dfd4" vertical={false} />
-                <XAxis dataKey="year" tick={{ fontSize: 12, fill: "#6b5c4b" }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 11, fill: "#6b5c4b" }} axisLine={false} tickLine={false} width={56} />
-                <Tooltip formatter={(value) => formatNumber(value)} contentStyle={{ borderRadius: 12, border: "1px solid #e7dfd4" }} />
-                <Legend wrapperStyle={{ fontSize: 12 }} />
-                <Area dataKey="upper" name="Upper bound" stroke="none" fill="#f5d28a" fillOpacity={0.4} />
-                <Area dataKey="lower" name="Lower bound" stroke="none" fill="#f5d28a" fillOpacity={0.2} />
-                <Area type="monotone" dataKey="actual" name="Historical" stroke="#a16207" strokeWidth={2} fill="none" connectNulls />
-                <Area type="monotone" dataKey="forecast" name="Forecast" stroke="#d97706" strokeWidth={2} fill="none" strokeDasharray="5 5" connectNulls />
-              </AreaChart>
-            </ResponsiveContainer>
-          </ChartShell>
-          {state.forecast?.metrics && (
-            <div className="mt-3 rounded-xl border border-stone-200 bg-stone-50 p-3 text-xs text-stone-500">
-              Model: {state.forecast.model || "N/A"} | MAE: {state.forecast.metrics.mae ?? "N/A"} | RMSE: {state.forecast.metrics.rmse ?? "N/A"}
-              {state.forecast.warning ? ` | ${state.forecast.warning}` : ""}
-            </div>
-          )}
-        </ChartCard>
       </div>
 
 

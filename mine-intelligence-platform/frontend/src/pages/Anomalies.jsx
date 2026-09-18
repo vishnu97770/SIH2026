@@ -5,18 +5,33 @@ import { Icon } from "../components/Icon";
 import { KpiCard } from "../components/KpiCard";
 import { formatNumber, formatPercent } from "../utils/format";
 
+const EMPTY_FILTERS = {
+  year: "",
+  mine: "",
+  mineral: "",
+  state: "",
+  district: "",
+};
+
 export function Anomalies() {
+  const [filters, setFilters] = useState(EMPTY_FILTERS);
+  const [meta, setMeta] = useState({ years: [], mines: [], minerals: [], states: [], districts: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [anomalies, setAnomalies] = useState(null);
   const [explanation, setExplanation] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
 
-  const load = async () => {
+  const load = async (nextFilters = filters) => {
     setLoading(true);
     setError("");
     try {
-      setAnomalies(await api.anomalies());
+      const session = await api.session();
+      const query = Object.fromEntries(
+        Object.entries(nextFilters).filter(([, value]) => value !== "" && value != null)
+      );
+      setMeta(session.filters || meta);
+      setAnomalies(await api.anomalies(query));
     } catch (err) {
       setError(err.message || "Could not load anomalies.");
     } finally {
@@ -26,6 +41,7 @@ export function Anomalies() {
 
   useEffect(() => {
     load();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   const primary = anomalies?.primary;
@@ -56,9 +72,39 @@ export function Anomalies() {
         <h2 className="mt-4 text-3xl font-semibold">Statistical anomaly timeline</h2>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-stone-300">
           Anomalies are derived from historical behavior and expected production, not fixed
-          thresholds.
+          thresholds. Filter below to check a specific mine, mineral, state, or district instead
+          of the combined total.
         </p>
         {error && <div className="mt-4 rounded-2xl border border-red-400/30 bg-red-400/10 px-4 py-3 text-sm text-red-50">{error}</div>}
+      </div>
+
+      <div className="rounded-2xl border border-stone-200 bg-[#fffaf1] p-4 shadow-sm">
+        <div className="grid gap-3 md:grid-cols-5">
+          <SelectField label="Year" value={filters.year} onChange={(value) => setFilters((f) => ({ ...f, year: value }))} options={meta.years} />
+          <SelectField label="Mine" value={filters.mine} onChange={(value) => setFilters((f) => ({ ...f, mine: value }))} options={meta.mines} />
+          <SelectField label="Mineral" value={filters.mineral} onChange={(value) => setFilters((f) => ({ ...f, mineral: value }))} options={meta.minerals} />
+          <SelectField label="State" value={filters.state} onChange={(value) => setFilters((f) => ({ ...f, state: value }))} options={meta.states} />
+          <SelectField label="District" value={filters.district} onChange={(value) => setFilters((f) => ({ ...f, district: value }))} options={meta.districts} />
+        </div>
+        <div className="mt-4 flex gap-3">
+          <button
+            type="button"
+            onClick={() => load(filters)}
+            className="rounded-xl bg-amber-600 px-4 py-2 text-sm font-semibold text-white transition hover:bg-amber-500"
+          >
+            Apply Filters
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              setFilters(EMPTY_FILTERS);
+              load(EMPTY_FILTERS);
+            }}
+            className="rounded-xl border border-stone-300 px-4 py-2 text-sm font-semibold text-stone-700 transition hover:bg-stone-50"
+          >
+            Reset
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
@@ -127,7 +173,7 @@ export function Anomalies() {
                 </div>
               ))
             ) : (
-              <EmptyState message="No anomalies were detected for the current dataset." />
+              <EmptyState message="No years exceeded the statistical anomaly threshold for the current filters. This means production stayed close to what the model expected - see the year-by-year comparison on the right for the full picture." />
             )}
           </div>
         </ChartCard>
@@ -163,6 +209,26 @@ export function Anomalies() {
   );
 }
 
+function SelectField({ label, value, onChange, options }) {
+  return (
+    <label className="space-y-1.5">
+      <span className="block text-xs font-semibold uppercase tracking-wide text-stone-400">{label}</span>
+      <select
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="w-full rounded-xl border border-stone-300 bg-white px-3 py-2.5 text-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
+      >
+        <option value="">All</option>
+        {options?.map((option) => (
+          <option key={option} value={option}>
+            {option}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
 function Tag({ children }) {
   return <span className="rounded-full bg-white px-2.5 py-1 font-medium text-red-700 ring-1 ring-red-200">{children}</span>;
 }
@@ -174,4 +240,3 @@ function LoadingState() {
 function EmptyState({ message }) {
   return <div className="rounded-2xl border border-dashed border-stone-200 bg-stone-50 px-4 py-8 text-center text-sm text-stone-500">{message}</div>;
 }
-
