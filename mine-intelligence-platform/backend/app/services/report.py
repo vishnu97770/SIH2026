@@ -47,11 +47,11 @@ def build_report_data(mine: str | None = None, report_type: str | None = None) -
             "risk_indicators": ["No dataset uploaded."],
             "recommendations": ["Upload a CSV or Excel production dataset to continue."],
             "executive_summary": "No dataset is currently uploaded.",
-            "ai_summary": "No dataset is currently uploaded.",
+            "closing_narrative": "No dataset is currently uploaded.",
             "citations": [],
         }
 
-    quality = data_quality()
+    quality = data_quality({"mine": mine} if mine else None)
     kpi_pack = kpis({"mine": mine} if mine else None)
     production_pack = production_series({"mine": mine} if mine else None)
     anomaly_pack = detect_anomalies(df)
@@ -100,6 +100,24 @@ def build_report_data(mine: str | None = None, report_type: str | None = None) -
         "Retrain the forecasting model after each new dataset upload to keep the model current.",
     ]
 
+    closing_parts = []
+    if forecast_pack.get("forecast"):
+        first_forecast = forecast_pack["forecast"][0]
+        closing_parts.append(
+            f"Looking ahead, {first_forecast['year']} production is projected at "
+            f"{_fmt(first_forecast['predicted_production'])} tonnes "
+            f"(range {_fmt(first_forecast['lower_bound'])}-{_fmt(first_forecast['upper_bound'])})."
+        )
+    else:
+        closing_parts.append("A forecast could not be generated for this selection yet.")
+    if risks:
+        closing_parts.append(
+            f"{len(risks)} risk indicator(s) were flagged for this period and should be reviewed before the next reporting cycle."
+        )
+    else:
+        closing_parts.append("No risk indicators were flagged for this period.")
+    closing_narrative = " ".join(closing_parts).strip()
+
     return {
         "has_data": True,
         "title": "Mining Production Intelligence Report",
@@ -115,7 +133,7 @@ def build_report_data(mine: str | None = None, report_type: str | None = None) -
         "risk_indicators": risks,
         "recommendations": recommendations,
         "executive_summary": ai_summary,
-        "ai_summary": ai_summary,
+        "closing_narrative": closing_narrative,
         "citations": [
             {
                 "document": "Uploaded Dataset",
@@ -219,13 +237,19 @@ def generate_pdf(mine: str | None = None, report_type: str | None = None) -> str
     story.append(Paragraph(escape("4. Production Trends"), heading_style))
     story.append(table)
 
-    section(
-        "5. Target Achievement",
-        [
-            "Target achievement is calculated only when the dataset provides a target column.",
-            "If the dataset has no target field, target-specific metrics are omitted rather than invented.",
-        ],
+    target_achievement_lines = []
+    if content["kpis"].get("target_achievement_pct") is not None:
+        target_achievement_lines.append(
+            f"Target achievement is {_fmt(content['kpis']['target_achievement_pct'])}% based on the uploaded target values."
+        )
+    else:
+        target_achievement_lines.append(
+            "Target achievement could not be calculated because the dataset has no target column for this selection."
+        )
+    target_achievement_lines.append(
+        "Target-specific metrics are only shown when the dataset provides a target field; they are never invented."
     )
+    section("5. Target Achievement", target_achievement_lines)
 
     if content["primary_anomaly"]:
         a = content["primary_anomaly"]
@@ -256,7 +280,7 @@ def generate_pdf(mine: str | None = None, report_type: str | None = None) -> str
     section("8. Major Insights", content["major_insights"] or ["No additional insights available."])
     section("9. Risk Indicators", content["risk_indicators"] or ["No explicit risk indicators."])
     section("10. Recommendations", content["recommendations"])
-    section("11. AI Narrative", [content["ai_summary"]])
+    section("11. Outlook & Closing Notes", [content["closing_narrative"]])
 
     doc.build(story)
     return str(REPORT_PATH)

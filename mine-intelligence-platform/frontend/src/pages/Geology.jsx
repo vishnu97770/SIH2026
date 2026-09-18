@@ -14,7 +14,22 @@ const DEFAULT_MINE = {
   isExactSite: true,
 };
 
-const EXAMPLE_MINES = ["Gevra Open Cast Mine", "Bingham Canyon Mine"];
+const EXAMPLE_MINES = ["Gevra Open Cast Mine", "Kusmunda Open Cast Mine"];
+
+// One real, well-documented flagship mine per Coal India subsidiary in the
+// uploaded dataset, so these links reliably resolve to a mapped mine footprint
+// (a bare company name like "MCL" would not).
+const COMPANY_MINES = [
+  { label: "SECL", query: "Kusmunda Open Cast Mine" },
+  { label: "MCL", query: "Bharatpur Opencast Mine" },
+  { label: "NCL", query: "Nigahi Coal Mine" },
+  { label: "CCL", query: "Piparwar Coal Mine" },
+  { label: "BCCL", query: "Moonidih Coal Mine" },
+  { label: "ECL", query: "Sonepur Bazari Opencast Mine" },
+  { label: "WCL", query: "Gondegaon Coal Mine" },
+  { label: "NEC", query: "Tikak Colliery" },
+  { label: "SCCL", query: "Ramagundam Opencast Mine" },
+];
 const SATELLITE_URL = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
 
 function isMineSite(result) {
@@ -157,6 +172,20 @@ export function Geology() {
                 className="rounded-full border border-stone-200 bg-stone-50 px-2.5 py-1 text-xs font-medium text-stone-600 transition hover:border-amber-300 hover:bg-amber-50 hover:text-amber-800"
               >
                 {mine}
+              </button>
+            ))}
+          </div>
+          <div className="mt-2 flex flex-wrap items-center gap-2">
+            <span className="text-xs text-stone-400">Your uploaded companies:</span>
+            {COMPANY_MINES.map((company) => (
+              <button
+                key={company.label}
+                type="button"
+                onClick={(event) => searchMine(event, company.query)}
+                className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-xs font-semibold text-amber-800 transition hover:border-amber-400 hover:bg-amber-100"
+                title={company.query}
+              >
+                {company.label}
               </button>
             ))}
           </div>

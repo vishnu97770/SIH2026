@@ -1,16 +1,24 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { api } from "../api/client";
 import { ChartCard } from "../components/ChartCard";
 import { Icon } from "../components/Icon";
 import { formatNumber, formatPercent } from "../utils/format";
 
 export function Reports() {
+  const [mines, setMines] = useState([]);
   const [mine, setMine] = useState("");
   const [reportType, setReportType] = useState("Mining Production Intelligence Report");
   const [report, setReport] = useState(null);
   const [generating, setGenerating] = useState(false);
   const [downloading, setDownloading] = useState(false);
   const [error, setError] = useState("");
+
+  useEffect(() => {
+    api
+      .filters()
+      .then((data) => setMines(data.mines || []))
+      .catch(() => setMines([]));
+  }, []);
 
   const generate = async () => {
     setGenerating(true);
@@ -44,6 +52,8 @@ export function Reports() {
     }
   };
 
+  const primary = report?.primary_anomaly;
+
   return (
     <div className="space-y-6">
       <div className="rounded-3xl border border-stone-200 bg-gradient-to-r from-stone-950 via-stone-900 to-amber-950 p-6 text-white">
@@ -53,8 +63,9 @@ export function Reports() {
         </div>
         <h2 className="mt-4 text-3xl font-semibold">Analytical report generation</h2>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-stone-300">
-          The report uses computed KPIs, anomaly findings, and forecast output. Groq can add
-          narrative explanation, but it never invents the underlying numbers.
+          Every number in this report is computed directly from your uploaded dataset - KPIs,
+          anomaly findings, and forecast output. Nothing is invented or estimated by a language
+          model.
         </p>
         {error && <div className="mt-4 rounded-2xl border border-red-400/30 bg-red-400/10 px-4 py-3 text-sm text-red-50">{error}</div>}
       </div>
@@ -62,12 +73,18 @@ export function Reports() {
       <div className="rounded-2xl border border-stone-200 bg-[#fffaf1] p-4 shadow-sm">
         <div className="grid gap-4 md:grid-cols-3">
           <Field label="Mine">
-            <input
+            <select
               value={mine}
               onChange={(e) => setMine(e.target.value)}
-              placeholder="Optional mine filter"
               className="w-full rounded-xl border border-stone-300 px-3 py-2.5 text-sm outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-100"
-            />
+            >
+              <option value="">All mines</option>
+              {mines.map((option) => (
+                <option key={option} value={option}>
+                  {option}
+                </option>
+              ))}
+            </select>
           </Field>
           <Field label="Report type">
             <select
@@ -108,11 +125,34 @@ export function Reports() {
             <p className="text-sm leading-6 text-stone-600">{report.executive_summary}</p>
           </ChartCard>
 
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid grid-cols-2 gap-4 md:grid-cols-5">
             <ReportMetric label="Quality score" value={`${report.dataset_overview?.quality_score ?? "N/A"} / 100`} />
+            <ReportMetric label="Growth" value={formatPercent(report.kpis?.growth_pct)} />
+            <ReportMetric label="Target achievement" value={formatPercent(report.kpis?.target_achievement_pct)} />
             <ReportMetric label="Anomalies" value={formatNumber(report.kpis?.anomaly_count)} />
             <ReportMetric label="Latest production" value={formatNumber(report.kpis?.latest_production)} />
           </div>
+
+          <ChartCard title="Anomaly Detection">
+            {primary ? (
+              <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3">
+                <div className="flex items-center justify-between">
+                  <div className="text-sm font-semibold text-red-800">
+                    {primary.year} - {primary.severity} severity
+                  </div>
+                  <div className="text-sm font-semibold text-red-800">{formatPercent(primary.deviation_pct)}</div>
+                </div>
+                <p className="mt-2 text-sm leading-6 text-red-700">{primary.reason}</p>
+                <div className="mt-2 text-xs text-red-700">
+                  Actual {formatNumber(primary.actual)} | Expected {formatNumber(primary.expected)}
+                </div>
+              </div>
+            ) : (
+              <div className="rounded-xl border border-dashed border-stone-200 bg-stone-50 px-4 py-6 text-center text-sm text-stone-500">
+                No statistically meaningful anomalies were identified for this selection.
+              </div>
+            )}
+          </ChartCard>
 
           <div className="grid gap-4 xl:grid-cols-2">
             <ReportListCard title="Major Insights" items={report.major_insights || []} />
@@ -144,11 +184,12 @@ export function Reports() {
                   </div>
                 ))}
               </div>
-              <div className="mt-4 rounded-xl border border-stone-200 bg-stone-50 px-4 py-3 text-xs text-stone-500">
-                AI narrative is grounded in the dataset and calculated metrics.
-              </div>
             </ChartCard>
           </div>
+
+          <ChartCard title="Outlook & Closing Notes">
+            <p className="text-sm leading-6 text-stone-600">{report.closing_narrative}</p>
+          </ChartCard>
         </div>
       ) : (
         <div className="rounded-3xl border border-dashed border-stone-200 bg-stone-50 px-4 py-10 text-center text-sm text-stone-500">
@@ -191,4 +232,3 @@ function ReportListCard({ title, items, tone = "amber" }) {
     </ChartCard>
   );
 }
-

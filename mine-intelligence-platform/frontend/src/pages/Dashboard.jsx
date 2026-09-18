@@ -12,6 +12,7 @@ import {
   YAxis,
 } from "recharts";
 import { api } from "../api/client";
+import { districtsForState, loadStoredFilters, minesForState, saveStoredFilters } from "../utils/filterStorage";
 import { ChartCard } from "../components/ChartCard";
 import { KpiCard } from "../components/KpiCard";
 import { Icon } from "../components/Icon";
@@ -40,7 +41,11 @@ const initialState = {
 
 export function Dashboard() {
   const [state, setState] = useState(initialState);
-  const [filters, setFilters] = useState(EMPTY_FILTERS);
+  const [filters, setFilters] = useState(() => loadStoredFilters("shared_mine_filters", EMPTY_FILTERS));
+
+  useEffect(() => {
+    saveStoredFilters("shared_mine_filters", filters);
+  }, [filters]);
 
   const loadDashboard = async (nextFilters = filters) => {
     setState((prev) => ({ ...prev, loading: true, error: "" }));
@@ -132,10 +137,10 @@ export function Dashboard() {
       <div className="rounded-2xl border border-stone-200 bg-[#fffaf1] p-4 shadow-sm">
         <div className="grid gap-3 md:grid-cols-5">
           <SelectField label="Year" value={filters.year} onChange={(value) => setFilters((f) => ({ ...f, year: value }))} options={state.filtersMeta.years} />
-          <SelectField label="Mine" value={filters.mine} onChange={(value) => setFilters((f) => ({ ...f, mine: value }))} options={state.filtersMeta.mines} />
+          <SelectField label="Mine" value={filters.mine} onChange={(value) => setFilters((f) => ({ ...f, mine: value }))} options={minesForState(state.filtersMeta, filters.state)} />
           <SelectField label="Mineral" value={filters.mineral} onChange={(value) => setFilters((f) => ({ ...f, mineral: value }))} options={state.filtersMeta.minerals} />
-          <SelectField label="State" value={filters.state} onChange={(value) => setFilters((f) => ({ ...f, state: value }))} options={state.filtersMeta.states} />
-          <SelectField label="District" value={filters.district} onChange={(value) => setFilters((f) => ({ ...f, district: value }))} options={state.filtersMeta.districts} />
+          <SelectField label="State" value={filters.state} onChange={(value) => setFilters((f) => ({ ...f, state: value, mine: "", district: "" }))} options={state.filtersMeta.states} />
+          <SelectField label="District" value={filters.district} onChange={(value) => setFilters((f) => ({ ...f, district: value }))} options={districtsForState(state.filtersMeta, filters.state)} />
         </div>
         <div className="mt-4 flex flex-wrap gap-3">
           <button

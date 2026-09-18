@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { api } from "../api/client";
+import { districtsForState, loadStoredFilters, minesForState, saveStoredFilters } from "../utils/filterStorage";
 import { ChartCard } from "../components/ChartCard";
 import { Icon } from "../components/Icon";
 import { KpiCard } from "../components/KpiCard";
@@ -14,13 +15,17 @@ const EMPTY_FILTERS = {
 };
 
 export function Anomalies() {
-  const [filters, setFilters] = useState(EMPTY_FILTERS);
+  const [filters, setFilters] = useState(() => loadStoredFilters("shared_mine_filters", EMPTY_FILTERS));
   const [meta, setMeta] = useState({ years: [], mines: [], minerals: [], states: [], districts: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [anomalies, setAnomalies] = useState(null);
   const [explanation, setExplanation] = useState("");
   const [aiLoading, setAiLoading] = useState(false);
+
+  useEffect(() => {
+    saveStoredFilters("shared_mine_filters", filters);
+  }, [filters]);
 
   const load = async (nextFilters = filters) => {
     setLoading(true);
@@ -52,7 +57,19 @@ export function Anomalies() {
     setAiLoading(true);
     setExplanation("");
     try {
-      const prompt = `Explain this anomaly using only the computed context: ${JSON.stringify(primary)}`;
+      // Describe the currently applied filters as plain text (not JSON) so the
+      // assistant's own entity matching picks up the same mine/state/district
+      // this page is filtered to - and deliberately avoid mentioning the
+      // specific year, since a bare 4-digit number gets misread as a year
+      // filter, narrowing the data to one row where anomaly detection can't
+      // run at all (it needs multiple years to know what's "expected").
+      const filterPhrase = Object.entries(filters)
+        .filter(([key, value]) => value && key !== "year")
+        .map(([key, value]) => `${key} ${value}`)
+        .join(" and ");
+      const prompt = filterPhrase
+        ? `Explain the most significant production anomaly for ${filterPhrase}, using the computed anomaly evidence.`
+        : "Explain the most significant production anomaly across all records, using the computed anomaly evidence.";
       const res = await api.askAssistant(prompt);
       setExplanation(res.answer);
     } catch (err) {
@@ -81,10 +98,10 @@ export function Anomalies() {
       <div className="rounded-2xl border border-stone-200 bg-[#fffaf1] p-4 shadow-sm">
         <div className="grid gap-3 md:grid-cols-5">
           <SelectField label="Year" value={filters.year} onChange={(value) => setFilters((f) => ({ ...f, year: value }))} options={meta.years} />
-          <SelectField label="Mine" value={filters.mine} onChange={(value) => setFilters((f) => ({ ...f, mine: value }))} options={meta.mines} />
+          <SelectField label="Mine" value={filters.mine} onChange={(value) => setFilters((f) => ({ ...f, mine: value }))} options={minesForState(meta, filters.state)} />
           <SelectField label="Mineral" value={filters.mineral} onChange={(value) => setFilters((f) => ({ ...f, mineral: value }))} options={meta.minerals} />
-          <SelectField label="State" value={filters.state} onChange={(value) => setFilters((f) => ({ ...f, state: value }))} options={meta.states} />
-          <SelectField label="District" value={filters.district} onChange={(value) => setFilters((f) => ({ ...f, district: value }))} options={meta.districts} />
+          <SelectField label="State" value={filters.state} onChange={(value) => setFilters((f) => ({ ...f, state: value, mine: "", district: "" }))} options={meta.states} />
+          <SelectField label="District" value={filters.district} onChange={(value) => setFilters((f) => ({ ...f, district: value }))} options={districtsForState(meta, filters.state)} />
         </div>
         <div className="mt-4 flex gap-3">
           <button

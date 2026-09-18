@@ -413,12 +413,32 @@ def get_filter_options() -> dict[str, list[str]]:
         return sorted(values)
 
     years = sorted({int(v) for v in pd.to_numeric(df["year"], errors="coerce").dropna().tolist()}) if "year" in df.columns else []
+
+    def group_unique_by_state(target_column: str) -> dict[str, list[str]]:
+        result: dict[str, list[str]] = {}
+        if "state" not in df.columns or target_column not in df.columns:
+            return result
+        grouped = df[["state", target_column]].dropna()
+        for state_value, group in grouped.groupby("state"):
+            state_key = str(state_value).strip()
+            if not state_key:
+                continue
+            result[state_key] = sorted(
+                {str(v) for v in group[target_column].tolist() if str(v).strip()}
+            )
+        return result
+
+    districts_by_state = group_unique_by_state("district")
+    mines_by_state = group_unique_by_state("mine")
+
     return {
         "years": years,
         "mines": unique_values("mine"),
         "minerals": unique_values("mineral"),
         "states": unique_values("state"),
         "districts": unique_values("district"),
+        "districts_by_state": districts_by_state,
+        "mines_by_state": mines_by_state,
     }
 
 

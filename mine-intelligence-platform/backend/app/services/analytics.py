@@ -185,11 +185,41 @@ def kpis(filters: dict[str, Any] | None = None) -> dict[str, Any]:
     }
 
 
-def data_quality() -> dict[str, Any]:
+def data_quality(filters: dict[str, Any] | None = None) -> dict[str, Any]:
     session = get_session()
+    base = dict(session.quality)
+
+    if not filters:
+        return {"has_data": has_data(), **base}
+
+    # duplicates/invalid_numeric_values/quality_score describe the original
+    # upload's cleanliness and can't be meaningfully recomputed on an
+    # already-deduplicated filtered slice - keep those as the whole-dataset
+    # figures. Everything else genuinely does depend on the filter, so
+    # recompute it fresh from the filtered rows.
+    import pandas as pd
+
+    from .data_service import get_dataframe
+
+    df = get_dataframe(filters)
+    row_count = int(df.shape[0])
+    column_count = int(df.shape[1])
+    missing_values = int(df.isna().sum().sum()) if row_count else 0
+    year_series = pd.to_numeric(df["year"], errors="coerce") if "year" in df.columns else None
+    year_min = int(year_series.min()) if year_series is not None and year_series.notna().any() else None
+    year_max = int(year_series.max()) if year_series is not None and year_series.notna().any() else None
+
     return {
         "has_data": has_data(),
-        **session.quality,
+        **base,
+        "rows": row_count,
+        "columns": column_count,
+        "missing_values": missing_values,
+        "year_range": [year_min, year_max] if year_min is not None and year_max is not None else None,
+        "mines": int(df["mine"].nunique(dropna=True)) if "mine" in df.columns else 0,
+        "minerals": int(df["mineral"].nunique(dropna=True)) if "mineral" in df.columns else 0,
+        "states": int(df["state"].nunique(dropna=True)) if "state" in df.columns else 0,
+        "districts": int(df["district"].nunique(dropna=True)) if "district" in df.columns else 0,
     }
 
 
