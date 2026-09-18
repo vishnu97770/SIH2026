@@ -1,188 +1,295 @@
-import { useState } from "react";
-import { ChartCard } from "../components/ChartCard";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { CircleMarker, GeoJSON, MapContainer, Popup, ScaleControl, TileLayer, useMap } from "react-leaflet";
+import "leaflet/dist/leaflet.css";
 import { Icon } from "../components/Icon";
-import { KpiCard } from "../components/KpiCard";
 
-const geologyKpis = {
-  reserves: "14.2M",
-  reservesUnit: "t",
-  seamThickness: "8.4",
-  activeHazards: 2,
-  dataSources: 4,
+const DEFAULT_MINE = {
+  id: "gevra-open-cast-mine",
+  name: "Gevra Open Cast Mine",
+  displayName: "Gevra Open Cast Mine, Korba, Chhattisgarh, India",
+  lat: 22.3337989,
+  lon: 82.589314,
+  bounds: [[22.313947, 82.550025], [22.3536206, 82.6251644]],
+  geometry: null,
+  isExactSite: true,
 };
 
-const geologyLayers = [
-  { id: 1, name: "Top soil", depth: "0-5m", pct: 25, material: "Alluvial cover" },
-  { id: 2, name: "Overburden", depth: "5-34m", pct: 55, material: "Clay and shale" },
-  { id: 3, name: "Coal seam", depth: "34-43m", pct: 85, material: "Primary productive seam" },
-  { id: 4, name: "Basement rock", depth: "43m+", pct: 100, material: "Hard rock interface" },
-];
+const EXAMPLE_MINES = ["Gevra Open Cast Mine", "Bingham Canyon Mine"];
+const SATELLITE_URL = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
 
-const mapFeatures = [
-  { id: 1, name: "Main Pit", kind: "infrastructure", x: 48, y: 48 },
-  { id: 2, name: "Reserve A", kind: "reserve", x: 33, y: 36 },
-  { id: 3, name: "Fault line", kind: "hazard", x: 62, y: 60 },
-  { id: 4, name: "Conveyor", kind: "infrastructure", x: 57, y: 42 },
-];
+function isMineSite(result) {
+  const category = result.category?.toLowerCase();
+  const type = result.type?.toLowerCase();
+  const name = `${result.name || ""} ${result.display_name || ""}`.toLowerCase();
+  const hasMineName = /\b(mine|mining|colliery|quarry|coalfield|pit)\b/.test(name);
+  const hasMineType =
+    type === "quarry" ||
+    type === "mine" ||
+    (type === "industrial" && category === "landuse") ||
+    result.extratags?.industrial === "mine" ||
+    Boolean(result.extratags?.resource);
+  return hasMineType && hasMineName && result.geojson?.type !== "Point";
+}
 
-const imageInsights = [
-  {
-    id: 1,
-    label: "Aerial mine footprint",
-    caption: "Illustrative aerial context used to show how geological layers and mine boundaries can be annotated.",
-    tags: ["Boundary", "Overburden", "Planning"],
-  },
-  {
-    id: 2,
-    label: "Conveyor corridor",
-    caption: "Operational infrastructure view for interpreting material flow and access paths.",
-    tags: ["Infrastructure", "Dispatch", "Logistics"],
-  },
-  {
-    id: 3,
-    label: "Rock outcrop",
-    caption: "Field-scale rock exposure for interpreting seam continuity and hazard indicators.",
-    tags: ["Outcrop", "Strata", "Inspection"],
-  },
-];
-
-const visualAssets = {
-  mineAerial:
-    "https://upload.wikimedia.org/wikipedia/commons/c/c8/Aerial_view_of_the_coal_mine_Tagebau_Hambach_in_Elsdorf%2C_Germany_%2851227521740%29.jpg",
-  conveyor:
-    "https://upload.wikimedia.org/wikipedia/commons/thumb/d/d5/Kay_Moor_conveyor.jpg/960px-Kay_Moor_conveyor.jpg",
-  outcrop:
-    "https://upload.wikimedia.org/wikipedia/commons/1/12/Rock_outcrop_on_Loch_Kanaird_-_geograph.org.uk_-_8374200.jpg",
-};
+function normalizeResult(result) {
+  const box = result.boundingbox?.map(Number);
+  return {
+    id: result.place_id,
+    name: result.namedetails?.name || result.name || result.display_name?.split(",")[0] || "Mine location",
+    displayName: result.display_name,
+    lat: Number(result.lat),
+    lon: Number(result.lon),
+    bounds: box?.length === 4 ? [[box[0], box[2]], [box[1], box[3]]] : null,
+    geometry: result.geojson || null,
+    isExactSite: true,
+  };
+}
 
 export function Geology() {
-  const [selectedFeature, setSelectedFeature] = useState(null);
+  const [query, setQuery] = useState("");
+  const [results, setResults] = useState([]);
+  const [selectedLocation, setSelectedLocation] = useState(DEFAULT_MINE);
+  const [isSearching, setIsSearching] = useState(false);
+  const [error, setError] = useState("");
+  const abortRef = useRef(null);
+
+  useEffect(() => () => abortRef.current?.abort(), []);
+
+  const searchMine = async (event, suggestedQuery) => {
+    event?.preventDefault();
+    const searchTerm = (suggestedQuery ?? query).trim();
+    if (!searchTerm) {
+      setError("Enter a mine, coalfield, quarry, or nearby location.");
+      return;
+    }
+
+    if (suggestedQuery) setQuery(suggestedQuery);
+    abortRef.current?.abort();
+    const controller = new AbortController();
+    abortRef.current = controller;
+    setIsSearching(true);
+    setError("");
+
+    try {
+      const params = new URLSearchParams({
+        q: searchTerm,
+        format: "jsonv2",
+        limit: "10",
+        addressdetails: "1",
+        namedetails: "1",
+        extratags: "1",
+        polygon_geojson: "1",
+        polygon_threshold: "0.00005",
+      });
+      const response = await fetch(`https://nominatim.openstreetmap.org/search?${params}`, {
+        signal: controller.signal,
+        headers: { Accept: "application/json" },
+      });
+      if (!response.ok) throw new Error("The location service is temporarily unavailable.");
+
+      const places = (await response.json())
+        .filter(isMineSite)
+        .map(normalizeResult)
+        .filter((place) => Number.isFinite(place.lat) && Number.isFinite(place.lon));
+
+      setResults(places);
+      if (places.length) {
+        setSelectedLocation(places[0]);
+      } else {
+        setError(`No mapped mine boundary was found for “${searchTerm}”. Check the official mine name and add its district, state, or country.`);
+      }
+    } catch (searchError) {
+      if (searchError.name !== "AbortError") {
+        setError(searchError.message || "Unable to search right now. Please try again.");
+      }
+    } finally {
+      if (!controller.signal.aborted) setIsSearching(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
       <div className="rounded-3xl border border-stone-200 bg-gradient-to-r from-stone-950 via-stone-900 to-amber-950 p-6 text-white">
         <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-3 py-1 text-xs text-amber-100">
-          <Icon name="geology" className="h-4 w-4" />
-          Geological overview
+          <Icon name="map" className="h-4 w-4" />
+          Live satellite explorer
         </div>
-        <h2 className="mt-4 text-3xl font-semibold">Geological & map intelligence</h2>
+        <h2 className="mt-4 text-3xl font-semibold">Mine location intelligence</h2>
         <p className="mt-2 max-w-2xl text-sm leading-6 text-stone-300">
-          This page remains a visual geology companion. It does not drive the mining analytics, but
-          it keeps the command-center feel with interpreted layers and inspection imagery.
+          Search for a mapped mine anywhere in the world, inspect its satellite imagery, and see
+          the mining-site footprint highlighted precisely on the map.
         </p>
       </div>
 
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <KpiCard label="Estimated Reserves" value={geologyKpis.reserves} unit={geologyKpis.reservesUnit} icon={<Icon name="geology" />} accent="green" footer="Illustrative reserve view" />
-        <KpiCard label="Seam Thickness" value={geologyKpis.seamThickness} unit="m" icon={<Icon name="layers" />} accent="amber" footer="Primary seam" />
-        <KpiCard label="Active Hazards" value={geologyKpis.activeHazards} icon={<Icon name="orange" />} accent="red" footer="Faults and ingress points" />
-        <KpiCard label="Data Sources" value={geologyKpis.dataSources} icon={<Icon name="image" />} accent="violet" footer="Imagery + interpretation" />
-      </div>
-
-      <div className="grid grid-cols-1 gap-4 xl:grid-cols-5">
-        <ChartCard title="Interpreted Geological Map" className="xl:col-span-3" action={<span className="rounded-full bg-emerald-50 px-2 py-0.5 text-xs font-medium text-emerald-700 ring-1 ring-emerald-200">Illustrative layer view</span>}>
-          <RealisticMap features={mapFeatures} onSelect={setSelectedFeature} />
-          {selectedFeature && (
-            <div className="mt-3 rounded-xl border border-stone-200 bg-stone-50 p-3 text-sm">
-              <div className="font-semibold text-stone-800">{selectedFeature.name}</div>
-              <div className="text-xs text-stone-500">{selectedFeature.kind}</div>
+      <section className="overflow-hidden rounded-3xl border border-stone-200 bg-white shadow-sm">
+        <div className="border-b border-stone-200 p-4 sm:p-5">
+          <form onSubmit={searchMine} className="flex flex-col gap-2 sm:flex-row">
+            <label className="sr-only" htmlFor="mine-location-search">Search for a mine location</label>
+            <div className="relative flex-1">
+              <span className="pointer-events-none absolute inset-y-0 left-3 flex items-center text-stone-400">
+                <Icon name="map" className="h-5 w-5" />
+              </span>
+              <input
+                id="mine-location-search"
+                value={query}
+                onChange={(event) => setQuery(event.target.value)}
+                placeholder="Search an exact mine name, e.g. Gevra Open Cast Mine"
+                autoComplete="off"
+                className="h-11 w-full rounded-xl border border-stone-300 bg-stone-50 pl-10 pr-3 text-sm text-stone-800 outline-none transition placeholder:text-stone-400 focus:border-amber-500 focus:bg-white focus:ring-2 focus:ring-amber-200"
+              />
             </div>
-          )}
-        </ChartCard>
+            <button
+              type="submit"
+              disabled={isSearching}
+              className="inline-flex h-11 items-center justify-center rounded-xl bg-stone-900 px-5 text-sm font-semibold text-white transition hover:bg-amber-700 disabled:cursor-wait disabled:opacity-60"
+            >
+              {isSearching ? "Locating…" : "Show on map"}
+            </button>
+          </form>
 
-        <ChartCard title="Geological Layers" className="xl:col-span-2">
-          <div className="space-y-3">
-            {geologyLayers.map((layer) => (
-              <div key={layer.id} className="rounded-2xl border border-stone-200 bg-white p-3">
-                <div className="flex items-center justify-between">
-                  <div className="text-sm font-semibold text-stone-800">{layer.name}</div>
-                  <div className="text-xs text-stone-400">{layer.depth}</div>
-                </div>
-                <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-stone-100">
-                  <div className="h-full rounded-full bg-gradient-to-r from-amber-400 to-emerald-400" style={{ width: `${layer.pct}%` }} />
-                </div>
-                <div className="mt-1 text-xs text-stone-400">{layer.material}</div>
-              </div>
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <span className="text-xs text-stone-400">Try:</span>
+            {EXAMPLE_MINES.map((mine) => (
+              <button
+                key={mine}
+                type="button"
+                onClick={(event) => searchMine(event, mine)}
+                className="rounded-full border border-stone-200 bg-stone-50 px-2.5 py-1 text-xs font-medium text-stone-600 transition hover:border-amber-300 hover:bg-amber-50 hover:text-amber-800"
+              >
+                {mine}
+              </button>
             ))}
           </div>
-        </ChartCard>
-      </div>
-
-      <div>
-        <div className="mb-3 flex items-center justify-between">
-          <h3 className="text-sm font-semibold text-stone-800">Imagery insights</h3>
-          <span className="text-xs text-stone-400">Illustrative field visuals</span>
+          {error && <div role="alert" className="mt-3 rounded-xl border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
         </div>
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-          {imageInsights.map((item, index) => {
-            const src = [visualAssets.mineAerial, visualAssets.conveyor, visualAssets.outcrop][index];
-            return (
-              <div key={item.id} className="overflow-hidden rounded-3xl border border-stone-200 bg-[#fffaf1] shadow-sm">
-                <div className="relative h-40 overflow-hidden">
-                  <img src={src} alt={item.label} className="h-full w-full object-cover" loading="lazy" />
-                  <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-stone-950/75 to-transparent px-3 pb-2 pt-8">
-                    <span className="rounded-full bg-white/90 px-2 py-1 text-[10px] font-semibold text-stone-700">
-                      Geology companion imagery
-                    </span>
-                  </div>
-                </div>
-                <div className="p-4">
-                  <div className="text-sm font-semibold text-stone-800">{item.label}</div>
-                  <p className="mt-1 text-xs leading-5 text-stone-500">{item.caption}</p>
-                  <div className="mt-3 flex flex-wrap gap-1.5">
-                    {item.tags.map((tag) => (
-                      <span key={tag} className="rounded-full bg-stone-100 px-2 py-0.5 text-[11px] font-medium text-stone-500">
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
+
+        <div className="grid min-h-[560px] grid-cols-1 lg:grid-cols-[minmax(0,1fr)_300px]">
+          <MineMap location={selectedLocation} />
+
+          <aside className="border-t border-stone-200 bg-[#fffaf1] p-4 lg:border-l lg:border-t-0">
+            <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-amber-700">Selected location</p>
+            <h3 className="mt-2 text-lg font-semibold text-stone-900">{selectedLocation.name}</h3>
+            <p className="mt-1 text-xs leading-5 text-stone-500">{selectedLocation.displayName}</p>
+            <div className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 ring-1 ring-emerald-200">
+              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+              Mine footprint identified
+            </div>
+            <div className="mt-4 grid grid-cols-2 gap-2">
+              <Coordinate label="Latitude" value={selectedLocation.lat.toFixed(5)} />
+              <Coordinate label="Longitude" value={selectedLocation.lon.toFixed(5)} />
+            </div>
+
+            {results.length > 1 && (
+              <div className="mt-6">
+                <p className="mb-2 text-xs font-semibold text-stone-700">Other search results</p>
+                <div className="space-y-2">
+                  {results.map((result) => (
+                    <button
+                      key={result.id}
+                      type="button"
+                      onClick={() => setSelectedLocation(result)}
+                      aria-pressed={selectedLocation.id === result.id}
+                      className={`w-full rounded-xl border p-3 text-left transition ${
+                        selectedLocation.id === result.id
+                          ? "border-amber-400 bg-amber-50"
+                          : "border-stone-200 bg-white hover:border-amber-300"
+                      }`}
+                    >
+                      <span className="block text-sm font-semibold text-stone-800">{result.name}</span>
+                      <span className="mt-0.5 line-clamp-2 block text-[11px] leading-4 text-stone-500">{result.displayName}</span>
+                    </button>
+                  ))}
                 </div>
               </div>
-            );
-          })}
+            )}
+
+            <div className="mt-6 rounded-2xl border border-stone-200 bg-white p-3 text-xs leading-5 text-stone-500">
+              The amber outline is the mapped mining-site boundary. Scroll or use +/− to inspect
+              the site. Close zoom keeps the satellite surface unobstructed by polygon shading.
+            </div>
+          </aside>
         </div>
-      </div>
+      </section>
+
+      <p className="px-1 text-[11px] leading-5 text-stone-400">
+        Satellite imagery is supplied by Esri World Imagery. Mine names and site boundaries are
+        supplied by OpenStreetMap contributors. Image dates, resolution, and boundary coverage vary by location.
+      </p>
     </div>
   );
 }
 
-function RealisticMap({ features, onSelect }) {
+function MineMap({ location }) {
+  const position = useMemo(() => [location.lat, location.lon], [location.lat, location.lon]);
+
   return (
-    <div className="relative h-80 overflow-hidden rounded-2xl border border-stone-300 bg-stone-900 shadow-inner">
-      <img
-        src={visualAssets.mineAerial}
-        alt="Illustrative mining landscape"
-        className="absolute inset-0 h-full w-full object-cover"
-      />
-      <div className="absolute inset-0 bg-stone-950/25" />
-      <div
-        className="absolute inset-0 opacity-25"
-        style={{
-          backgroundImage:
-            "linear-gradient(rgba(255,255,255,.35) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.35) 1px, transparent 1px)",
-          backgroundSize: "42px 42px",
-        }}
-      />
-      {features.map((feature) => (
-        <button
-          key={feature.id}
-          type="button"
-          title={feature.name}
-          onClick={() => onSelect(feature)}
-          className="absolute -translate-x-1/2 -translate-y-1/2 rounded-full p-1.5 focus:outline-none focus:ring-2 focus:ring-white"
-          style={{ left: `${feature.x}%`, top: `${feature.y}%` }}
-        >
-          <span
-            className={`block h-4 w-4 rounded-full border-2 border-white shadow-[0_2px_8px_rgba(0,0,0,.55)] ${
-              feature.kind === "hazard" ? "bg-red-500" : feature.kind === "reserve" ? "bg-emerald-500" : "bg-amber-500"
-            }`}
-          />
-        </button>
-      ))}
-      <div className="absolute left-3 top-3 rounded-md bg-stone-950/75 px-2.5 py-1.5 text-[10px] font-semibold text-white backdrop-blur-sm">
-        GEOLOGY LAYER VIEW
+    <div className="relative min-h-[460px] bg-stone-200 lg:min-h-[560px]">
+      <MapContainer
+        center={position}
+        zoom={14}
+        minZoom={3}
+        maxZoom={17}
+        scrollWheelZoom
+        zoomSnap={1}
+        zoomDelta={1}
+        wheelPxPerZoomLevel={70}
+        preferCanvas
+        className="absolute inset-0 h-full w-full"
+      >
+        <TileLayer
+          url={SATELLITE_URL}
+          maxNativeZoom={17}
+          maxZoom={17}
+          keepBuffer={4}
+          updateWhenZooming
+          attribution="Tiles &copy; Esri — Source: Esri, Maxar, Earthstar Geographics, and the GIS User Community"
+        />
+        <ScaleControl position="bottomright" imperial={false} />
+
+        <MapController location={location} position={position} />
+        {location.geometry && (
+          <GeoJSON
+            key={location.id}
+            data={location.geometry}
+            style={{ color: "#f59e0b", weight: 3, opacity: 1, fill: false, fillOpacity: 0 }}
+          >
+            <Popup>
+              <strong>{location.name}</strong><br />
+              <span>Mapped mining-site boundary</span>
+            </Popup>
+          </GeoJSON>
+        )}
+        <CircleMarker center={position} radius={9} pathOptions={{ color: "#ffffff", weight: 3, fillColor: "#f59e0b", fillOpacity: 1 }}>
+          <Popup>
+            <strong>{location.name}</strong><br />
+            <span>{location.displayName}</span>
+          </Popup>
+        </CircleMarker>
+      </MapContainer>
+      <div className="pointer-events-none absolute bottom-7 left-3 z-[500] rounded-lg bg-stone-950/80 px-3 py-2 text-[11px] font-semibold text-white shadow-lg backdrop-blur-sm">
+        SHARP SATELLITE IMAGERY
       </div>
     </div>
   );
 }
 
+function MapController({ location, position }) {
+  const map = useMap();
+  useEffect(() => {
+    if (location.bounds) {
+      map.fitBounds(location.bounds, { padding: [36, 36], maxZoom: 16, animate: true, duration: 1.1 });
+    } else {
+      map.flyTo(position, 16, { duration: 1.1 });
+    }
+  }, [location.bounds, map, position]);
+  return null;
+}
+
+function Coordinate({ label, value }) {
+  return (
+    <div className="rounded-xl border border-stone-200 bg-white p-2.5">
+      <div className="text-[10px] uppercase tracking-wide text-stone-400">{label}</div>
+      <div className="mt-0.5 font-mono text-xs font-semibold text-stone-700">{value}</div>
+    </div>
+  );
+}

@@ -21,7 +21,7 @@ const PAGE_META = {
   },
   "/geology": {
     title: "Geological & Map Insights",
-    description: "Explore Mine X geology, spatial features, and imagery",
+    description: "Search mine locations and explore live satellite imagery",
     breadcrumb: ["Home", "Geological & Map"],
   },
   "/reports": {
