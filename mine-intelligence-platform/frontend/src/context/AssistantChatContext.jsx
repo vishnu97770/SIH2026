@@ -31,7 +31,11 @@ function titleFromQuestion(question) {
 
 export function AssistantChatProvider({ children }) {
   const [conversations, setConversations] = useState(loadConversations);
-  const [activeId, setActiveId] = useState(() => loadConversations()[0].id);
+  // Reuse the conversations computed above instead of calling loadConversations()
+  // again: on a brand-new browser (empty localStorage) each call minted a
+  // different random id, so activeId never matched any entry in conversations
+  // and every sent message silently updated a conversation that didn't exist.
+  const [activeId, setActiveId] = useState(() => conversations[0].id);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 

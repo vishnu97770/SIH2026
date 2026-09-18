@@ -11,10 +11,18 @@ from pathlib import Path
 from typing import Any
 
 from ..config import settings
+from .user_context import user_slug
 
 RUNTIME_DIR = Path(settings.data_dir) / "runtime"
-DOCUMENTS_INDEX_PATH = RUNTIME_DIR / "documents_index.json"
 SUPPORTED_SUFFIXES = {".pdf", ".png", ".jpg", ".jpeg"}
+
+
+def _documents_index_path() -> Path:
+    return RUNTIME_DIR / f"documents_index_{user_slug()}.json"
+
+
+def _documents_dir() -> Path:
+    return Path(settings.documents_dir) / user_slug()
 
 _TYPE_KEYWORDS = {
     "Geological": ("geolog", "strata", "seam", "reserve", "ore grade", "overburden"),
@@ -57,23 +65,24 @@ def tesseract_available() -> bool:
 
 
 def _ensure_dirs() -> None:
-    Path(settings.documents_dir).mkdir(parents=True, exist_ok=True)
+    _documents_dir().mkdir(parents=True, exist_ok=True)
     RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def _load_index() -> list[dict[str, Any]]:
     _ensure_dirs()
-    if not DOCUMENTS_INDEX_PATH.exists():
+    index_path = _documents_index_path()
+    if not index_path.exists():
         return []
     try:
-        return json.loads(DOCUMENTS_INDEX_PATH.read_text(encoding="utf-8"))
+        return json.loads(index_path.read_text(encoding="utf-8"))
     except Exception:
         return []
 
 
 def _save_index(records: list[dict[str, Any]]) -> None:
     _ensure_dirs()
-    DOCUMENTS_INDEX_PATH.write_text(json.dumps(records, indent=2), encoding="utf-8")
+    _documents_index_path().write_text(json.dumps(records, indent=2), encoding="utf-8")
 
 
 def _run(cmd: list[str], timeout: int = 60) -> tuple[int, bytes, bytes]:
@@ -189,7 +198,7 @@ def _remove_existing_by_name(filename: str) -> None:
     remaining = []
     for record in records:
         if record["source_name"] == filename:
-            stored_path = Path(settings.documents_dir) / record["stored_as"]
+            stored_path = _documents_dir() / record["stored_as"]
             if stored_path.exists():
                 stored_path.unlink()
             continue
@@ -206,7 +215,7 @@ def ingest_document(file_bytes: bytes, filename: str) -> dict[str, Any]:
     suffix = Path(filename).suffix.lower()
 
     doc_id = uuid.uuid4().hex
-    dest = Path(settings.documents_dir) / f"{doc_id}{suffix or '.bin'}"
+    dest = _documents_dir() / f"{doc_id}{suffix or '.bin'}"
     dest.write_bytes(file_bytes)
 
     if suffix == ".pdf":
@@ -302,7 +311,7 @@ def get_document_file(doc_id: str) -> tuple[Path, str]:
     match = next((r for r in records if r["id"] == doc_id), None)
     if match is None:
         raise ValueError("Document not found.")
-    path = Path(settings.documents_dir) / match["stored_as"]
+    path = _documents_dir() / match["stored_as"]
     if not path.exists():
         raise ValueError("The stored file could not be found on the server.")
     return path, match["source_name"]
@@ -315,7 +324,7 @@ def remove_document(doc_id: str) -> dict[str, Any]:
         raise ValueError("Document not found.")
 
     removed = next(r for r in records if r["id"] == doc_id)
-    stored_path = Path(settings.documents_dir) / removed["stored_as"]
+    stored_path = _documents_dir() / removed["stored_as"]
     if stored_path.exists():
         stored_path.unlink()
 

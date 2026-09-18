@@ -10,6 +10,7 @@ import bcrypt
 from ..config import settings
 from ..db import get_db
 from ..models import User
+from ..services.user_context import set_current_username
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -42,7 +43,12 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None):
     to_encode.update({"exp": expire})
     return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
 
-def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+async def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(get_db)):
+    # This must stay `async def` (not `def`): FastAPI runs sync dependencies in a
+    # worker-thread context *copy*, so a contextvar set inside a sync function
+    # would never be visible to the route handler. Running directly on the
+    # event loop's task keeps set_current_username's effect visible for the
+    # rest of this request.
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
@@ -55,10 +61,11 @@ def get_current_user(token: str = Depends(oauth2_scheme), db: Session = Depends(
             raise credentials_exception
     except jwt.PyJWTError:
         raise credentials_exception
-        
+
     user = db.query(User).filter(User.username == username).first()
     if user is None:
         raise credentials_exception
+    set_current_username(user.username)
     return user
 
 @router.post("/register", response_model=Token)

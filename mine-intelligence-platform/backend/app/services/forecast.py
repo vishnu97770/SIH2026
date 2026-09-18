@@ -4,7 +4,6 @@ import math
 import pickle
 from dataclasses import dataclass
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any
 
 import numpy as np
@@ -13,8 +12,7 @@ import pandas as pd
 from ..config import settings
 from .analytics import aggregate_yearly_series
 from .data_service import get_dataframe, get_session, set_last_model
-
-MODEL_PATH = Path(settings.models_dir) / "production_forecaster.pkl"
+from .user_context import forecast_model_path
 
 
 @dataclass
@@ -150,18 +148,20 @@ def _select_model(years: np.ndarray, values: np.ndarray) -> dict[str, Any]:
 
 
 def _load_artifact() -> dict[str, Any] | None:
-    if not MODEL_PATH.exists():
+    model_path = forecast_model_path()
+    if not model_path.exists():
         return None
     try:
-        with MODEL_PATH.open("rb") as fh:
+        with model_path.open("rb") as fh:
             return pickle.load(fh)
     except Exception:
         return None
 
 
 def _save_artifact(artifact: dict[str, Any]) -> None:
-    MODEL_PATH.parent.mkdir(parents=True, exist_ok=True)
-    with MODEL_PATH.open("wb") as fh:
+    model_path = forecast_model_path()
+    model_path.parent.mkdir(parents=True, exist_ok=True)
+    with model_path.open("wb") as fh:
         pickle.dump(artifact, fh)
 
 

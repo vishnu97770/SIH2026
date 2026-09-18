@@ -12,10 +12,14 @@ from typing import Any
 import pandas as pd
 
 from ..config import settings
+from .user_context import forecast_model_path, get_current_username, user_slug
 
 RUNTIME_DIR = Path(settings.data_dir) / "runtime"
-SESSION_PATH = RUNTIME_DIR / "analysis_session.json"
-SESSION_DATA_PATH = RUNTIME_DIR / "analysis_session.csv"
+
+
+def _session_paths(username: str) -> tuple[Path, Path]:
+    slug = user_slug(username)
+    return RUNTIME_DIR / f"analysis_session_{slug}.json", RUNTIME_DIR / f"analysis_session_{slug}.csv"
 
 
 def _ensure_dirs() -> None:
@@ -92,70 +96,73 @@ class AnalysisSession:
         }
 
 
-SESSION = AnalysisSession()
+# Sessions live in-process, one per authenticated user, keyed by username.
+# This keeps each account's uploaded dataset isolated instead of every user
+# sharing a single global workspace.
+_SESSIONS: dict[str, AnalysisSession] = {}
 
 
-def _load_persisted_session() -> None:
+def _load_persisted_session(username: str) -> AnalysisSession:
     _ensure_dirs()
-    if not SESSION_PATH.exists() or not SESSION_DATA_PATH.exists():
-        return
+    session = AnalysisSession()
+    session_path, session_data_path = _session_paths(username)
+    if not session_path.exists() or not session_data_path.exists():
+        return session
 
     try:
-        meta = json.loads(SESSION_PATH.read_text(encoding="utf-8"))
-        df = pd.read_csv(SESSION_DATA_PATH)
+        meta = json.loads(session_path.read_text(encoding="utf-8"))
+        df = pd.read_csv(session_data_path)
     except Exception:
+        return session
+
+    session.session_id = meta.get("session_id", "")
+    session.source_name = meta.get("source_name", "")
+    session.uploaded_at = meta.get("uploaded_at", "")
+    session.row_count = int(meta.get("row_count", len(df)))
+    session.raw_columns = meta.get("raw_columns", list(df.columns))
+    session.column_map = meta.get("column_map", {})
+    session.quality = meta.get("quality", {})
+    session.chat_history = meta.get("chat_history", [])
+    session.last_model = meta.get("last_model", {})
+    session.last_topic = meta.get("last_topic", {})
+    session.clean_df = df
+    return session
+
+
+def save_session(username: str | None = None) -> None:
+    username = username if username is not None else get_current_username()
+    session = _SESSIONS.get(username)
+    if session is None:
         return
 
-    SESSION.session_id = meta.get("session_id", "")
-    SESSION.source_name = meta.get("source_name", "")
-    SESSION.uploaded_at = meta.get("uploaded_at", "")
-    SESSION.row_count = int(meta.get("row_count", len(df)))
-    SESSION.raw_columns = meta.get("raw_columns", list(df.columns))
-    SESSION.column_map = meta.get("column_map", {})
-    SESSION.quality = meta.get("quality", {})
-    SESSION.chat_history = meta.get("chat_history", [])
-    SESSION.last_model = meta.get("last_model", {})
-    SESSION.last_topic = meta.get("last_topic", {})
-    SESSION.clean_df = df
-
-
-def save_session() -> None:
     _ensure_dirs()
-    if SESSION.clean_df.empty:
-        if SESSION_PATH.exists():
-            SESSION_PATH.unlink()
-        if SESSION_DATA_PATH.exists():
-            SESSION_DATA_PATH.unlink()
+    session_path, session_data_path = _session_paths(username)
+    if session.clean_df.empty:
+        if session_path.exists():
+            session_path.unlink()
+        if session_data_path.exists():
+            session_data_path.unlink()
         return
 
     payload = {
-        **SESSION.as_metadata(),
-        "raw_columns": SESSION.raw_columns,
-        "chat_history": SESSION.chat_history[-settings.assistant_history_limit :],
-        "last_model": SESSION.last_model,
-        "last_topic": SESSION.last_topic,
+        **session.as_metadata(),
+        "raw_columns": session.raw_columns,
+        "chat_history": session.chat_history[-settings.assistant_history_limit :],
+        "last_model": session.last_model,
+        "last_topic": session.last_topic,
     }
-    SESSION_PATH.write_text(json.dumps(payload, indent=2), encoding="utf-8")
-    SESSION.clean_df.to_csv(SESSION_DATA_PATH, index=False)
+    session_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+    session.clean_df.to_csv(session_data_path, index=False)
 
 
 def clear_session() -> None:
-    SESSION.session_id = ""
-    SESSION.source_name = ""
-    SESSION.uploaded_at = ""
-    SESSION.row_count = 0
-    SESSION.raw_columns = []
-    SESSION.column_map = {}
-    SESSION.quality = {}
-    SESSION.chat_history = []
-    SESSION.last_model = {}
-    SESSION.last_topic = {}
-    SESSION.clean_df = pd.DataFrame()
-    save_session()
+    username = get_current_username()
+    _SESSIONS[username] = AnalysisSession()
+    save_session(username)
 
 
 def remove_dataset() -> dict[str, Any]:
-    source_name = SESSION.source_name
+    source_name = get_session().source_name
     clear_session()
 
     if source_name:
@@ -164,7 +171,7 @@ def remove_dataset() -> dict[str, Any]:
             if path.is_file():
                 path.unlink()
 
-    model_path = Path(settings.models_dir) / "production_forecaster.pkl"
+    model_path = forecast_model_path()
     if model_path.exists():
         model_path.unlink()
 
@@ -317,24 +324,27 @@ def _clean_dataframe(df: pd.DataFrame, filename: str) -> tuple[pd.DataFrame, dic
 
 def upload_dataset(file_bytes: bytes, filename: str) -> dict[str, Any]:
     _ensure_dirs()
+    username = get_current_username()
     df = _read_uploaded_file(file_bytes, filename)
     clean_df, rename_map, quality = _clean_dataframe(df, filename)
 
-    SESSION.session_id = uuid.uuid4().hex
-    SESSION.source_name = filename
-    SESSION.uploaded_at = datetime.now(timezone.utc).isoformat()
-    SESSION.row_count = int(clean_df.shape[0])
-    SESSION.clean_df = clean_df
-    SESSION.raw_columns = list(df.columns)
-    SESSION.column_map = rename_map
-    SESSION.quality = quality
-    SESSION.chat_history = []
-    SESSION.last_model = {}
-    SESSION.last_topic = {}
-    save_session()
+    session = AnalysisSession()
+    session.session_id = uuid.uuid4().hex
+    session.source_name = filename
+    session.uploaded_at = datetime.now(timezone.utc).isoformat()
+    session.row_count = int(clean_df.shape[0])
+    session.clean_df = clean_df
+    session.raw_columns = list(df.columns)
+    session.column_map = rename_map
+    session.quality = quality
+    session.chat_history = []
+    session.last_model = {}
+    session.last_topic = {}
+    _SESSIONS[username] = session
+    save_session(username)
 
     return {
-        "session": SESSION.as_metadata(),
+        "session": session.as_metadata(),
         "quality": quality,
         "message": f"{filename} uploaded and analyzed successfully.",
     }
@@ -346,10 +356,13 @@ def set_session_from_dataframe(df: pd.DataFrame, filename: str = "demo_dataset.c
 
 
 def get_session() -> AnalysisSession:
-    if not SESSION.clean_df.empty:
-        return SESSION
-    _load_persisted_session()
-    return SESSION
+    username = get_current_username()
+    session = _SESSIONS.get(username)
+    if session is not None and not session.clean_df.empty:
+        return session
+    session = _load_persisted_session(username)
+    _SESSIONS[username] = session
+    return session
 
 
 def has_data() -> bool:
@@ -432,6 +445,3 @@ def set_last_topic(topic: dict[str, Any]) -> None:
     session = get_session()
     session.last_topic = topic
     save_session()
-
-
-_load_persisted_session()
