@@ -103,7 +103,11 @@ def _ocr_image_file(path: Path) -> str:
 
 
 def _extract_pdf_pages(pdf_path: Path) -> list[dict[str, Any]]:
-    code, out, _ = _run(["pdftotext", "-layout", str(pdf_path), "-"], timeout=90)
+    # No -layout flag: for multi-column pages (common in government reports),
+    # -layout tries to preserve exact physical column positions, which
+    # actually interleaves unrelated side-by-side columns line-by-line into
+    # garbled, jumping sentences. Plain reading order keeps prose coherent.
+    code, out, _ = _run(["pdftotext", str(pdf_path), "-"], timeout=90)
     raw_pages = out.decode("utf-8", errors="replace").split("\f") if code == 0 else []
     # pdftotext emits a trailing empty page marker - drop it.
     if raw_pages and not raw_pages[-1].strip():

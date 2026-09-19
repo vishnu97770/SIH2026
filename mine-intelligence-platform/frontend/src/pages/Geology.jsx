@@ -24,7 +24,7 @@ const COMPANY_MINES = [
   { label: "MCL", query: "Bharatpur Opencast Mine" },
   { label: "NCL", query: "Nigahi Coal Mine" },
   { label: "CCL", query: "Piparwar Coal Mine" },
-  { label: "BCCL", query: "Moonidih Coal Mine" },
+  { label: "BCCL", query: "Jharia, Dhanbad" },
   { label: "ECL", query: "Sonepur Bazari Opencast Mine" },
   { label: "WCL", query: "Gondegaon Coal Mine" },
   { label: "NEC", query: "Tikak Colliery" },
