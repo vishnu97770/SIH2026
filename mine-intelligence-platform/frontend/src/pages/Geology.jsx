@@ -21,14 +21,14 @@ const EXAMPLE_MINES = ["Gevra Open Cast Mine", "Kusmunda Open Cast Mine"];
 // (a bare company name like "MCL" would not).
 const COMPANY_MINES = [
   { label: "SECL", query: "Kusmunda Open Cast Mine" },
-  { label: "MCL", query: "Bharatpur Opencast Mine" },
-  { label: "NCL", query: "Nigahi Coal Mine" },
+  { label: "MCL", query: "Talcher, Odisha" },
+  { label: "NCL", query: "Singrauli, Madhya Pradesh" },
   { label: "CCL", query: "Piparwar Coal Mine" },
-  { label: "BCCL", query: "Moonidih Coal Mine" },
-  { label: "ECL", query: "Sonepur Bazari Opencast Mine" },
+  { label: "BCCL", query: "Jharia, Dhanbad" },
+  { label: "ECL", query: "Raniganj, West Bengal" },
   { label: "WCL", query: "Gondegaon Coal Mine" },
-  { label: "NEC", query: "Tikak Colliery" },
-  { label: "SCCL", query: "Ramagundam Opencast Mine" },
+  { label: "NEC", query: "Margherita, Assam" },
+  { label: "SCCL", query: "Kothagudem, Telangana" },
 ];
 const SATELLITE_URL = "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}";
 
@@ -46,7 +46,7 @@ function isMineSite(result) {
   return hasMineType && hasMineName && result.geojson?.type !== "Point";
 }
 
-function normalizeResult(result) {
+function normalizeResult(result, isExactSite = true) {
   const box = result.boundingbox?.map(Number);
   return {
     id: result.place_id,
@@ -56,7 +56,7 @@ function normalizeResult(result) {
     lon: Number(result.lon),
     bounds: box?.length === 4 ? [[box[0], box[2]], [box[1], box[3]]] : null,
     geometry: result.geojson || null,
-    isExactSite: true,
+    isExactSite,
   };
 }
 
@@ -102,16 +102,31 @@ export function Geology() {
       });
       if (!response.ok) throw new Error("The location service is temporarily unavailable.");
 
-      const places = (await response.json())
+      const rawResults = await response.json();
+      const confirmedMines = rawResults
         .filter(isMineSite)
-        .map(normalizeResult)
+        .map((r) => normalizeResult(r, true))
         .filter((place) => Number.isFinite(place.lat) && Number.isFinite(place.lon));
 
-      setResults(places);
-      if (places.length) {
-        setSelectedLocation(places[0]);
+      if (confirmedMines.length) {
+        setResults(confirmedMines);
+        setSelectedLocation(confirmedMines[0]);
       } else {
-        setError(`No mapped mine boundary was found for “${searchTerm}”. Check the official mine name and add its district, state, or country.`);
+        // No confirmed mine boundary found. Fall back to the best general
+        // location match (e.g. the nearest mapped town/district) so there is
+        // still something real to look at - clearly labeled as approximate,
+        // never claimed to be a confirmed mine footprint.
+        const approximateAreas = rawResults
+          .map((r) => normalizeResult(r, false))
+          .filter((place) => Number.isFinite(place.lat) && Number.isFinite(place.lon));
+
+        setResults(approximateAreas);
+        if (approximateAreas.length) {
+          setSelectedLocation(approximateAreas[0]);
+          setError(`No confirmed mine boundary was found for “${searchTerm}” - showing the closest general area instead.`);
+        } else {
+          setError(`No mapped location was found for “${searchTerm}”. Check the official mine name and add its district, state, or country.`);
+        }
       }
     } catch (searchError) {
       if (searchError.name !== "AbortError") {
@@ -199,10 +214,17 @@ export function Geology() {
             <p className="text-[11px] font-semibold uppercase tracking-[0.16em] text-amber-700">Selected location</p>
             <h3 className="mt-2 text-lg font-semibold text-stone-900">{selectedLocation.name}</h3>
             <p className="mt-1 text-xs leading-5 text-stone-500">{selectedLocation.displayName}</p>
-            <div className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 ring-1 ring-emerald-200">
-              <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-              Mine footprint identified
-            </div>
+            {selectedLocation.isExactSite ? (
+              <div className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-[11px] font-semibold text-emerald-700 ring-1 ring-emerald-200">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                Mine footprint identified
+              </div>
+            ) : (
+              <div className="mt-3 inline-flex items-center gap-1.5 rounded-full bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-700 ring-1 ring-amber-200">
+                <span className="h-1.5 w-1.5 rounded-full bg-amber-500" />
+                Approximate area (no confirmed mine boundary)
+              </div>
+            )}
             <div className="mt-4 grid grid-cols-2 gap-2">
               <Coordinate label="Latitude" value={selectedLocation.lat.toFixed(5)} />
               <Coordinate label="Longitude" value={selectedLocation.lon.toFixed(5)} />
